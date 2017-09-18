@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 	"strings"
@@ -168,7 +167,7 @@ func jobFromMap(m map[string]string) (Job, error) {
 			j.URL = v
 		case "AggrID":
 			j.AggrID = v
-		case "State":
+		case "DownloadState":
 			j.DownloadState = State(v)
 		case "RetryCount":
 			j.RetryCount, err = strconv.Atoi(v)
@@ -187,7 +186,7 @@ func jobFromMap(m map[string]string) (Job, error) {
 		case "CallbackState":
 			j.CallbackState = State(v)
 		default:
-			log.Printf("Field %s with value %s was not found in Job struct", k, v)
+			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
 		}
 	}
 	return j, nil
