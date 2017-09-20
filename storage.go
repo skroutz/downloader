@@ -214,7 +214,7 @@ func (aggr *Aggregation) Save() error {
 
 // Exists checks if the given aggregation exists in the DB
 func (aggr *Aggregation) Exists() (bool, error) {
-	res, err := Redis.Exists(aggr.ID).Result()
+	res, err := Redis.Exists(aggrKeyPrefix + aggr.ID).Result()
 
 	if err != nil {
 		return false, err
