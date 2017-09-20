@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/urfave/cli"
 )
@@ -45,9 +47,36 @@ func main() {
 			},
 			Before: BeforeCommand,
 		},
+		cli.Command{
+			Name: "processor",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "config, c",
+					Usage: "`FILE` to load config from",
+					Value: "config.json",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+				processor := NewProcessor(cfg.Processor.StorageDir)
+				closechan := make(chan struct{})
+				go processor.Start(closechan)
+
+				<-sigCh
+				log.Println("[Main] Received Shutdown signal")
+				closechan <- struct{}{}
+				log.Println("[Main] Waiting for Processor...")
+				<-closechan
+				return nil
+			},
+			Before: BeforeCommand,
+		},
 	}
 
-	log.Println(app.Run(os.Args))
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Bye!")
 }
 
 // BeforeCommand extracts configuration from the provided config file and initializes redis
