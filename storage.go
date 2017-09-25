@@ -21,9 +21,10 @@ type State string
 
 // Valid State values
 const (
-	StatePending = "Pending"
-	StateFailed  = "Failed"
-	StateSuccess = "Success"
+	StatePending    = "Pending"
+	StateFailed     = "Failed"
+	StateSuccess    = "Success"
+	StateInProgress = "InProgress"
 )
 
 // Job represents a download.
