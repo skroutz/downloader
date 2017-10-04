@@ -16,7 +16,7 @@ func init() {
 }
 
 func TestProcessorOpenClose(t *testing.T) {
-	processor := &Processor{StorageDir: savedir}
+	processor := NewProcessor(1, savedir)
 	closechan := make(chan struct{})
 	go processor.Start(closechan)
 
@@ -36,7 +36,7 @@ func TestProcessorFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor := NewProcessor(savedir)
+	processor := NewProcessor(1, savedir)
 	closeChan := make(chan struct{})
 
 	go processor.Start(closeChan)

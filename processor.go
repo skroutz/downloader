@@ -16,6 +16,8 @@ import (
 
 var client *http.Client
 
+const defaultScanInterval = 3
+
 func init() {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{},
@@ -25,8 +27,9 @@ func init() {
 
 // Processor is in charge of assigning worker pools to aggregations found in Redis and instrumenting them
 type Processor struct {
-	StorageDir string
-	pool       map[string]*WorkerPool
+	StorageDir   string
+	scanInterval int
+	pool         map[string]*WorkerPool
 }
 
 // WorkerPool manages download goroutines and is responsible of enforcing rate limit quotas on its
@@ -159,10 +162,11 @@ func (wp *WorkerPool) Work(ctx context.Context, saveDir string) {
 }
 
 // NewProcessor acts as a constructor for the Processor struct
-func NewProcessor(storageDir string) Processor {
+func NewProcessor(scaninter int, storageDir string) Processor {
 	return Processor{
-		StorageDir: storageDir,
-		pool:       make(map[string]*WorkerPool),
+		StorageDir:   storageDir,
+		scanInterval: scaninter,
+		pool:         make(map[string]*WorkerPool),
 	}
 }
 
@@ -171,6 +175,7 @@ func NewProcessor(storageDir string) Processor {
 func (p *Processor) Start(closeCh chan struct{}) {
 	log.Println("[Processor] Starting")
 	workerClose := make(chan string)
+	scanTicker := time.NewTicker(time.Duration(p.scanInterval) * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	//defer the cancel call to free context resources in all possible cases
 	defer cancel()
@@ -186,18 +191,8 @@ PROCESSOR_LOOP:
 		// Close signal from upper layer
 		case <-closeCh:
 			cancel()
-		default:
-			if ctx.Err() != nil {
-				// our context has been canceled
-				if len(p.pool) == 0 {
-					break PROCESSOR_LOOP
-				}
-				continue
-
-			}
-
-			//TODO: would it make sense to scan for keys every eg 10 secs ( with a ticker )
-			// instead of that being the default case
+			scanTicker.Stop()
+		case <-scanTicker.C:
 			var cursor uint64
 			for {
 				var keys []string
@@ -229,6 +224,16 @@ PROCESSOR_LOOP:
 				if cursor == 0 {
 					break
 				}
+			}
+
+		default:
+			if ctx.Err() != nil {
+				// our context has been canceled
+				if len(p.pool) == 0 {
+					break PROCESSOR_LOOP
+				}
+				continue
+
 			}
 		}
 	}
