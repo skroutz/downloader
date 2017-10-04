@@ -13,6 +13,8 @@ import (
 const (
 	aggrKeyPrefix = "aggr:"
 	jobKeyPrefix  = "jobs:"
+
+	maxRetries = 3
 )
 
 // State represents the download & callback states.
@@ -134,6 +136,18 @@ func (j *Job) SetState(state State) error {
 	return j.Save()
 }
 
+// RetryOrFail checks the retry count of the current download
+// and retries the job if its RetryCount < maxRetries else it marks
+// it as failed
+func (j *Job) RetryOrFail(err string) error {
+	if j.RetryCount < maxRetries {
+		j.RetryCount++
+		return j.QueuePendingDownload()
+	} else {
+		return j.SetStateWithMeta(StateFailed, err)
+	}
+}
+
 func (j *Job) toMap() (map[string]interface{}, error) {
 	out := make(map[string]interface{})
 
@@ -211,6 +225,13 @@ func GetAggregation(id string) (Aggregation, error) {
 func (aggr *Aggregation) Save() error {
 	cmd := Redis.HSet(aggrKeyPrefix+aggr.ID, "Limit", aggr.Limit)
 	return cmd.Err()
+}
+
+// Remove deletes the aggregation key from Redis
+// It does not remove the jobs list for the aggregation
+// since we never want to lose track of already queued jobs
+func (aggr *Aggregation) Remove() error {
+	return Redis.Del(aggrKeyPrefix + aggr.ID).Err()
 }
 
 // Exists checks if the given aggregation exists in the DB
