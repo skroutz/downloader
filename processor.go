@@ -4,10 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,7 +37,6 @@ type WorkerPool struct {
 	activeWorkers int32
 	jobChan       chan Job
 	shutdown      chan struct{}
-	Context       context.Context
 }
 
 // NewWorkerPool creates a WorkerPool for the given Aggregation
@@ -98,7 +95,7 @@ WORKERPOOL_LOOP:
 					defer wg.Done()
 					defer wp.DecreaseWorkers()
 					wp.IncreaseWorkers()
-					wp.Work(ctx, savedir)
+					wp.work(ctx, savedir)
 				}()
 			}
 		}
@@ -108,53 +105,12 @@ WORKERPOOL_LOOP:
 	log.Printf("[WorkerPool %s] Closing", wp.Aggr.ID)
 }
 
-// Work processes Jobs, consuming from the WorkerPool's jobChan
-func (wp *WorkerPool) Work(ctx context.Context, saveDir string) {
+// work processes Jobs, consuming from the WorkerPool's jobChan
+func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
 	for {
 		select {
 		case job := <-wp.jobChan:
-			out, err := os.Create(saveDir + job.ID)
-			if err != nil {
-				job.RetryOrFail(fmt.Sprintf("Could not write to file, %v", err))
-				continue
-			}
-			defer out.Close()
-
-			req, err := http.NewRequest("GET", job.URL, nil)
-			if err != nil {
-				job.RetryOrFail(fmt.Sprintf("Could not create request, %v", err))
-				continue
-			}
-
-			resp, err := client.Do(req.WithContext(ctx))
-			if err != nil {
-				if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-					err = job.SetStateWithMeta(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
-					if err != nil {
-						log.Println(err)
-					}
-					continue
-				} else {
-					job.RetryOrFail(err.Error())
-				}
-				continue
-			}
-
-			if resp.StatusCode >= http.StatusInternalServerError {
-				job.RetryOrFail(fmt.Sprintf("Received status code %s", resp.Status))
-				continue
-			} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-				job.SetStateWithMeta(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
-				continue
-			}
-			defer resp.Body.Close()
-
-			_, err = io.Copy(out, resp.Body)
-			if err != nil {
-				job.RetryOrFail(fmt.Sprintf("Could not download file, %v", err))
-				continue
-			}
-			job.SetState(StateSuccess)
+			job.Perform(ctx, saveDir)
 		default:
 			return
 		}

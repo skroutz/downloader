@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -86,6 +91,52 @@ func GetJob(id string) (Job, error) {
 	return jobFromMap(cmd.Val())
 }
 
+// Perform process the job, downloads the URL contents , reports any errors and queues the job for retry if necessary
+func (j *Job) Perform(ctx context.Context, saveDir string) {
+	out, err := os.Create(saveDir + j.ID)
+	if err != nil {
+		j.RetryOrFail(fmt.Sprintf("Could not write to file, %v", err))
+		return
+	}
+	defer out.Close()
+
+	req, err := http.NewRequest("GET", j.URL, nil)
+	if err != nil {
+		j.RetryOrFail(fmt.Sprintf("Could not create request, %v", err))
+		return
+	}
+
+	resp, err := client.Do(req.WithContext(ctx))
+	if err != nil {
+		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
+			err = j.SetStateWithMeta(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
+			if err != nil {
+				log.Println(err)
+			}
+			return
+		}
+
+		j.RetryOrFail(err.Error())
+		return
+	}
+
+	if resp.StatusCode >= http.StatusInternalServerError {
+		j.RetryOrFail(fmt.Sprintf("Received status code %s", resp.Status))
+		return
+	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
+		j.SetStateWithMeta(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
+		return
+	}
+	defer resp.Body.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		j.RetryOrFail(fmt.Sprintf("Could not download file, %v", err))
+		return
+	}
+	j.SetState(StateSuccess)
+}
+
 // Exists checks if a job exists in the DB
 func (j *Job) Exists() (bool, error) {
 	res, err := Redis.Exists(j.ID).Result()
@@ -143,9 +194,8 @@ func (j *Job) RetryOrFail(err string) error {
 	if j.RetryCount < maxRetries {
 		j.RetryCount++
 		return j.QueuePendingDownload()
-	} else {
-		return j.SetStateWithMeta(StateFailed, err)
 	}
+	return j.SetStateWithMeta(StateFailed, err)
 }
 
 func (j *Job) toMap() (map[string]interface{}, error) {
