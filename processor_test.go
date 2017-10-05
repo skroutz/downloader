@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"os"
-	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -55,15 +55,21 @@ func TestProcessorFlow(t *testing.T) {
 	}
 }
 
-func TestDownload(t *testing.T) {
+func TestWorkerPoolWork(t *testing.T) {
 	job := GetTestJob()
 	job.URL = "https://httpbin.org/image/png"
 	job.Save()
 	defer os.Remove(savedir + job.ID)
 
 	wp := NewWorkerPool(Aggregation{ID: job.AggrID, Limit: 1})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wp.work(context.TODO(), savedir)
+		wg.Done()
+	}()
 	wp.jobChan <- job
-	wp.work(context.TODO(), savedir)
+	wg.Wait()
 	defer os.Remove(savedir + job.ID)
 	test, err := GetJob(job.ID)
 	if err != nil {
@@ -72,30 +78,5 @@ func TestDownload(t *testing.T) {
 
 	if test.DownloadState != StateSuccess {
 		t.Error("Job should not have failed")
-	}
-}
-
-func TestTLSError(t *testing.T) {
-	job := GetTestJob()
-	job.URL = "https://expired.badssl.com"
-	job.Save()
-	wp := NewWorkerPool(Aggregation{ID: job.AggrID, Limit: 1})
-	wp.jobChan <- job
-	wp.work(context.TODO(), savedir)
-	defer os.Remove(savedir + job.ID)
-
-	j, err := GetJob(job.ID)
-	if err != nil {
-		t.Fatalf("Could not retrieve job from redis: %v", err)
-	}
-
-	if j.DownloadState != StateFailed {
-		t.Error("Download should have failed")
-	}
-	if !strings.Contains(j.Meta, "TLS Error occured") {
-		t.Error("TLS Error was not reported correctly")
-	}
-	if j.RetryCount > 0 {
-		t.Error("TLS Errors should not be retried")
 	}
 }

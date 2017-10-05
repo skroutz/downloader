@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -76,5 +79,28 @@ func TestRetryAndFail(t *testing.T) {
 
 	if testjob.DownloadState != StateFailed {
 		t.Error("Job should have failed state")
+	}
+}
+
+func TestTLSError(t *testing.T) {
+	job := GetTestJob()
+	job.URL = "https://expired.badssl.com"
+	job.Save()
+	job.Perform(context.TODO(), savedir)
+	defer os.Remove(savedir + job.ID)
+
+	j, err := GetJob(job.ID)
+	if err != nil {
+		t.Fatalf("Could not retrieve job from redis: %v", err)
+	}
+
+	if j.DownloadState != StateFailed {
+		t.Error("Download should have failed")
+	}
+	if !strings.Contains(j.Meta, "TLS Error occured") {
+		t.Error("TLS Error was not reported correctly")
+	}
+	if j.RetryCount > 0 {
+		t.Error("TLS Errors should not be retried")
 	}
 }

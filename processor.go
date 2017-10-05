@@ -14,8 +14,6 @@ import (
 
 var client *http.Client
 
-const defaultScanInterval = 3
-
 func init() {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{},
@@ -44,7 +42,7 @@ func NewWorkerPool(aggr Aggregation) WorkerPool {
 	return WorkerPool{
 		activeWorkers: 0,
 		Aggr:          aggr,
-		jobChan:       make(chan Job, 1),
+		jobChan:       make(chan Job),
 	}
 }
 
@@ -85,10 +83,6 @@ WORKERPOOL_LOOP:
 				}
 				continue
 			}
-			// Set StateInProgress to keep track of which jobs are queued for download
-			job.SetState(StateInProgress)
-			wp.jobChan <- job
-
 			if wp.ActiveWorkers() < wp.Aggr.Limit {
 				wg.Add(1)
 				go func() {
@@ -98,6 +92,10 @@ WORKERPOOL_LOOP:
 					wp.work(ctx, savedir)
 				}()
 			}
+
+			// Set StateInProgress to keep track of which jobs are queued for download
+			job.SetState(StateInProgress)
+			wp.jobChan <- job
 		}
 	}
 
@@ -131,15 +129,15 @@ func NewProcessor(scaninter int, storageDir string) Processor {
 func (p *Processor) Start(closeCh chan struct{}) {
 	log.Println("[Processor] Starting")
 	workerClose := make(chan string)
+	var wpWG sync.WaitGroup
 	scanTicker := time.NewTicker(time.Duration(p.scanInterval) * time.Second)
+	defer scanTicker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
-	//defer the cancel call to free context resources in all possible cases
-	defer cancel()
 
 PROCESSOR_LOOP:
 	for {
 		select {
-		// An Aggregation worker pool closed
+		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
 			log.Println("[Processor] Deleting worker for " + aggrID)
 			delete(p.pool, aggrID)
@@ -147,14 +145,14 @@ PROCESSOR_LOOP:
 		// Close signal from upper layer
 		case <-closeCh:
 			cancel()
-			scanTicker.Stop()
+			break PROCESSOR_LOOP
 		case <-scanTicker.C:
 			var cursor uint64
 			for {
 				var keys []string
 				var err error
 				if keys, cursor, err = Redis.Scan(cursor, aggrKeyPrefix+"*", 50).Result(); err != nil {
-					log.Println(fmt.Errorf("[Processor]Could not scan keys: %v", err))
+					log.Println(fmt.Errorf("[Processor] Could not scan keys: %v", err))
 					break
 				}
 
@@ -169,10 +167,15 @@ PROCESSOR_LOOP:
 						}
 						wp := NewWorkerPool(aggr)
 						p.pool[aggrID] = &wp
+						wpWG.Add(1)
 
 						go func() {
+							defer wpWG.Done()
 							wp.Start(ctx, p.StorageDir)
-							workerClose <- wp.Aggr.ID
+							// The processor only needs to be informed about non-forced close ( without context-cancel )
+							if ctx.Err() == nil {
+								workerClose <- wp.Aggr.ID
+							}
 						}()
 					}
 				}
@@ -181,18 +184,10 @@ PROCESSOR_LOOP:
 					break
 				}
 			}
-
-		default:
-			if ctx.Err() != nil {
-				// our context has been canceled
-				if len(p.pool) == 0 {
-					break PROCESSOR_LOOP
-				}
-				continue
-
-			}
 		}
 	}
+
+	wpWG.Wait()
 	log.Println("[Processor] Closing")
 	closeCh <- struct{}{}
 	return
