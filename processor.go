@@ -76,7 +76,7 @@ WORKERPOOL_LOOP:
 			close(wp.jobChan)
 			break WORKERPOOL_LOOP
 		default:
-			job, err := PopJob(jobKeyPrefix + wp.Aggr.ID)
+			job, err := PopJob(wp.Aggr.RedisJobsKey())
 			if err != nil {
 				if err.Error() != "Queue is empty" {
 					log.Println(err)

@@ -260,21 +260,36 @@ func jobFromMap(m map[string]string) (Job, error) {
 
 // GetAggregation fetches an aggregation from the DB and returns it
 func GetAggregation(id string) (Aggregation, error) {
-	cmd := Redis.HGet(aggrKeyPrefix+id, "Limit")
+	aggr := Aggregation{ID: id, Limit: 0}
+
+	cmd := Redis.HGet(aggr.RedisKey(), "Limit")
 	err := cmd.Err()
 	if err != nil {
 		return Aggregation{}, err
 	}
+
 	maxConns, err := strconv.Atoi(cmd.Val())
 	if err != nil {
 		return Aggregation{}, err
 	}
-	return Aggregation{ID: id, Limit: maxConns}, nil
+	aggr.Limit = maxConns
+
+	return aggr, nil
+}
+
+// Return the Redis key
+func (aggr *Aggregation) RedisKey() string {
+	return aggrKeyPrefix + aggr.ID
+}
+
+// Return the Redis job list key
+func (aggr *Aggregation) RedisJobsKey() string {
+	return jobKeyPrefix + aggr.ID
 }
 
 // Save updates/ creates the current aggregation in redis.
 func (aggr *Aggregation) Save() error {
-	cmd := Redis.HSet(aggrKeyPrefix+aggr.ID, "Limit", aggr.Limit)
+	cmd := Redis.HSet(aggr.RedisKey(), "Limit", aggr.Limit)
 	return cmd.Err()
 }
 
@@ -282,12 +297,12 @@ func (aggr *Aggregation) Save() error {
 // It does not remove the jobs list for the aggregation
 // since we never want to lose track of already queued jobs
 func (aggr *Aggregation) Remove() error {
-	return Redis.Del(aggrKeyPrefix + aggr.ID).Err()
+	return Redis.Del(aggr.RedisKey()).Err()
 }
 
 // Exists checks if the given aggregation exists in the DB
 func (aggr *Aggregation) Exists() (bool, error) {
-	res, err := Redis.Exists(aggrKeyPrefix + aggr.ID).Result()
+	res, err := Redis.Exists(aggr.RedisKey()).Result()
 
 	if err != nil {
 		return false, err
