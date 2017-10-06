@@ -160,21 +160,6 @@ func (j *Job) QueuePendingDownload() error {
 	return intcmd.Err()
 }
 
-// PopJob attempts to pop a Job ID from the specified queue.
-// If it succeeds the job with the popped ID is returned.
-func PopJob(queue string) (Job, error) {
-	cmd := Redis.LPop(queue)
-	if err := cmd.Err(); err != nil {
-		if cmd.Err().Error() != "redis: nil" {
-			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
-		}
-		//No jobs popped
-		return Job{}, errors.New("Queue is empty")
-	}
-
-	return GetJob(cmd.Val())
-}
-
 // SetStateWithMeta changes the current Job state to the provided value, updates the Meta field and reports any errors
 func (j *Job) SetStateWithMeta(state State, meta string) error {
 	j.DownloadState = state
@@ -309,4 +294,19 @@ func (aggr *Aggregation) Exists() (bool, error) {
 	}
 
 	return res > 0, nil
+}
+
+// PopJob attempts to pop a Job for that aggregation.
+// If it succeeds the job with the popped ID is returned.
+func (aggr *Aggregation) PopJob() (Job, error) {
+	cmd := Redis.LPop(aggr.RedisJobsKey())
+	if err := cmd.Err(); err != nil {
+		if cmd.Err().Error() != "redis: nil" {
+			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
+		}
+		//No jobs popped
+		return Job{}, errors.New("Queue is empty")
+	}
+
+	return GetJob(cmd.Val())
 }
