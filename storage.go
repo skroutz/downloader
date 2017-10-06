@@ -93,6 +93,7 @@ func GetJob(id string) (Job, error) {
 
 // Perform process the job, downloads the URL contents , reports any errors and queues the job for retry if necessary
 func (j *Job) Perform(ctx context.Context, saveDir string) {
+	j.SetState(StateInProgress)
 	out, err := os.Create(saveDir + j.ID)
 	if err != nil {
 		j.RetryOrFail(fmt.Sprintf("Could not write to file, %v", err))

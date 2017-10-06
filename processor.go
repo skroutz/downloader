@@ -92,9 +92,6 @@ WORKERPOOL_LOOP:
 					wp.work(ctx, savedir)
 				}()
 			}
-
-			// Set StateInProgress to keep track of which jobs are queued for download
-			job.SetState(StateInProgress)
 			wp.jobChan <- job
 		}
 	}
