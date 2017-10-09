@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -42,8 +45,25 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
+				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+				l := log.New(os.Stderr, "[API] ", log.Ldate|log.Ltime)
 				s := newServer(c.String("host"), c.Int("port"))
-				return s.ListenAndServe()
+				go func() {
+					l.Println(fmt.Sprintf("Listening on %s...", s.Addr))
+					err := s.ListenAndServe()
+					if err != nil && err != http.ErrServerClosed {
+						l.Fatal(err)
+					}
+				}()
+
+				<-sigCh
+				l.Println("Shutting down gracefully...")
+				err := s.Shutdown(context.TODO())
+				if err != nil {
+					return err
+				}
+				l.Println("Bye!")
+				return nil
 			},
 			Before: BeforeCommand,
 		},
@@ -67,6 +87,7 @@ func main() {
 				closechan <- struct{}{}
 				log.Println("[Main] Waiting for Processor...")
 				<-closechan
+				log.Println("Bye!")
 				return nil
 			},
 			Before: BeforeCommand,
@@ -76,7 +97,6 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Bye!")
 }
 
 // BeforeCommand extracts configuration from the provided config file and initializes redis
