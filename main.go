@@ -47,7 +47,7 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 				l := log.New(os.Stderr, "[API] ", log.Ldate|log.Ltime)
-				s := newServer(c.String("host"), c.Int("port"))
+				s := NewAPIServer(c.String("host"), c.Int("port"))
 				go func() {
 					l.Println(fmt.Sprintf("Listening on %s...", s.Addr))
 					err := s.ListenAndServe()
