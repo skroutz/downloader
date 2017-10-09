@@ -21,7 +21,7 @@ var (
 func main() {
 	app := cli.NewApp()
 	app.Name = "downloader"
-	app.Usage = "RateLimited Async download API"
+	app.Usage = "Async rate-limited downloading service"
 	app.HideVersion = true
 
 	app.Commands = cli.Commands{
