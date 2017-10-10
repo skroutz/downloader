@@ -15,42 +15,57 @@ import (
 	"github.com/go-redis/redis"
 )
 
+// State represents the download & callback states.
+// For valid values see constants below.
+type State string
+
 const (
+	// Valid State values
+	StatePending    = "Pending"
+	StateFailed     = "Failed"
+	StateSuccess    = "Success"
+	StateInProgress = "InProgress"
+
 	aggrKeyPrefix = "aggr:"
 	jobKeyPrefix  = "jobs:"
 
 	maxRetries = 3
 )
 
-// State represents the download & callback states.
-// For valid values see constants below.
-type State string
-
-// Valid State values
-const (
-	StatePending    = "Pending"
-	StateFailed     = "Failed"
-	StateSuccess    = "Success"
-	StateInProgress = "InProgress"
-)
-
-// Job represents a download.
-// It is the main entity of the downloader and holds all info and state of the download
+// Job represents a user request for downloading a resource.
+//
+// It is the core entity of the downloader and holds all info and state of
+// the download.
 type Job struct {
-	ID            string `json:"id"`
-	URL           string `json:"url"`
-	AggrID        string `json:"aggr_id"`
-	DownloadState State  `json:"-"`
-	RetryCount    int    `json:"-"`
-	Meta          string `json:"-"`
+	// Auto-generated
+	ID string `json:"id"`
+
+	// The URL pointing to the resource to be downloaded
+	URL string `json:"url"`
+
+	// AggrID is the ID of the aggregation the job belongs to.
+	AggrID string `json:"aggr_id"`
+
+	DownloadState State `json:"-"`
+
+	// RetryCount is how many times the download was attempted.
+	RetryCount int `json:"-"`
+
+	// Auxiliary ad-hoc information. Typically used for communicating
+	// errors back to the user.
+	Meta string `json:"-"`
+
 	CallbackURL   string `json:"callback_url"`
 	CallbackCount int    `json:"-"`
 	CallbackState State  `json:"-"`
 }
 
-// Aggregation represents a rate limit unit.
+// Aggregation is the concept through which the rate limit rules are defined
+// and enforced.
 type Aggregation struct {
-	ID    string
+	ID string
+
+	// Maximum numbers of concurrent download requests
 	Limit int
 }
 
@@ -62,7 +77,8 @@ func (s State) MarshalBinary() (data []byte, err error) {
 // Redis must be initialized before use
 var Redis *redis.Client
 
-// InitStorage creates the Redis client singleton to be used by the storage class
+// InitStorage initializes the Redis client singleton to be used by the
+// storage class.
 func InitStorage(host string, port int) error {
 	Redis = redis.NewClient(&redis.Options{Addr: strings.Join([]string{host, strconv.Itoa(port)}, ":")})
 	if ping := Redis.Ping(); ping.Err() != nil || ping.Val() != "PONG" {
@@ -74,7 +90,7 @@ func InitStorage(host string, port int) error {
 	return nil
 }
 
-// Save updates/ creates the current job in redis.
+// Save updates or creates j in Redis.
 func (j *Job) Save() error {
 	m, err := j.toMap()
 	if err != nil {
@@ -85,13 +101,14 @@ func (j *Job) Save() error {
 	return err
 }
 
-//GetJob fetches the Job with the given id from Redis
+// GetJob fetches the Job with the given id from Redis.
 func GetJob(id string) (Job, error) {
 	cmd := Redis.HGetAll(id)
 	return jobFromMap(cmd.Val())
 }
 
-// Perform process the job, downloads the URL contents , reports any errors and queues the job for retry if necessary
+// Perform downloads the resource denoted by j.URL and updates its state in
+// Redis accordingly. It may retry downloading on certain errors.
 func (j *Job) Perform(ctx context.Context, saveDir string) {
 	j.SetState(StateInProgress)
 	out, err := os.Create(saveDir + j.ID)
@@ -138,7 +155,7 @@ func (j *Job) Perform(ctx context.Context, saveDir string) {
 	j.SetState(StateSuccess)
 }
 
-// Exists checks if a job exists in the DB
+// Exists checks if a job exists in Redis
 func (j *Job) Exists() (bool, error) {
 	res, err := Redis.Exists(j.ID).Result()
 
@@ -158,21 +175,6 @@ func (j *Job) QueuePendingDownload() error {
 	}
 	intcmd := Redis.RPush(jobKeyPrefix+j.AggrID, j.ID)
 	return intcmd.Err()
-}
-
-// PopJob attempts to pop a Job ID from the specified queue.
-// If it succeeds the job with the popped ID is returned.
-func PopJob(queue string) (Job, error) {
-	cmd := Redis.LPop(queue)
-	if err := cmd.Err(); err != nil {
-		if cmd.Err().Error() != "redis: nil" {
-			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
-		}
-		//No jobs popped
-		return Job{}, errors.New("Queue is empty")
-	}
-
-	return GetJob(cmd.Val())
 }
 
 // SetStateWithMeta changes the current Job state to the provided value, updates the Meta field and reports any errors
@@ -258,23 +260,38 @@ func jobFromMap(m map[string]string) (Job, error) {
 	return j, nil
 }
 
-// GetAggregation fetches an aggregation from the DB and returns it
+// GetAggregation fetches an aggregation from the Redis and returns it
 func GetAggregation(id string) (Aggregation, error) {
-	cmd := Redis.HGet(aggrKeyPrefix+id, "Limit")
+	aggr := Aggregation{ID: id, Limit: 0}
+
+	cmd := Redis.HGet(aggr.RedisKey(), "Limit")
 	err := cmd.Err()
 	if err != nil {
 		return Aggregation{}, err
 	}
+
 	maxConns, err := strconv.Atoi(cmd.Val())
 	if err != nil {
 		return Aggregation{}, err
 	}
-	return Aggregation{ID: id, Limit: maxConns}, nil
+	aggr.Limit = maxConns
+
+	return aggr, nil
+}
+
+// Return the Redis key
+func (aggr *Aggregation) RedisKey() string {
+	return aggrKeyPrefix + aggr.ID
+}
+
+// Return the Redis job list key
+func (aggr *Aggregation) RedisJobsKey() string {
+	return jobKeyPrefix + aggr.ID
 }
 
 // Save updates/ creates the current aggregation in redis.
 func (aggr *Aggregation) Save() error {
-	cmd := Redis.HSet(aggrKeyPrefix+aggr.ID, "Limit", aggr.Limit)
+	cmd := Redis.HSet(aggr.RedisKey(), "Limit", aggr.Limit)
 	return cmd.Err()
 }
 
@@ -282,16 +299,31 @@ func (aggr *Aggregation) Save() error {
 // It does not remove the jobs list for the aggregation
 // since we never want to lose track of already queued jobs
 func (aggr *Aggregation) Remove() error {
-	return Redis.Del(aggrKeyPrefix + aggr.ID).Err()
+	return Redis.Del(aggr.RedisKey()).Err()
 }
 
-// Exists checks if the given aggregation exists in the DB
+// Exists checks if the given aggregation exists in the Redis
 func (aggr *Aggregation) Exists() (bool, error) {
-	res, err := Redis.Exists(aggrKeyPrefix + aggr.ID).Result()
+	res, err := Redis.Exists(aggr.RedisKey()).Result()
 
 	if err != nil {
 		return false, err
 	}
 
 	return res > 0, nil
+}
+
+// PopJob attempts to pop a Job for that aggregation.
+// If it succeeds the job with the popped ID is returned.
+func (aggr *Aggregation) PopJob() (Job, error) {
+	cmd := Redis.LPop(aggr.RedisJobsKey())
+	if err := cmd.Err(); err != nil {
+		if cmd.Err().Error() != "redis: nil" {
+			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
+		}
+		//No jobs popped
+		return Job{}, errors.New("Queue is empty")
+	}
+
+	return GetJob(cmd.Val())
 }

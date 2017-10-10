@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,7 +21,7 @@ var (
 func main() {
 	app := cli.NewApp()
 	app.Name = "downloader"
-	app.Usage = "RateLimited Async download API"
+	app.Usage = "Async rate-limited downloading service"
 	app.HideVersion = true
 
 	app.Commands = cli.Commands{
@@ -42,8 +45,25 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				s := newServer(c.String("host"), c.Int("port"))
-				return s.ListenAndServe()
+				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+				l := log.New(os.Stderr, "[API] ", log.Ldate|log.Ltime)
+				s := NewAPIServer(c.String("host"), c.Int("port"))
+				go func() {
+					l.Println(fmt.Sprintf("Listening on %s...", s.Addr))
+					err := s.ListenAndServe()
+					if err != nil && err != http.ErrServerClosed {
+						l.Fatal(err)
+					}
+				}()
+
+				<-sigCh
+				l.Println("Shutting down gracefully...")
+				err := s.Shutdown(context.TODO())
+				if err != nil {
+					return err
+				}
+				l.Println("Bye!")
+				return nil
 			},
 			Before: BeforeCommand,
 		},
@@ -58,15 +78,17 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+				l := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
 				processor := NewProcessor(3, cfg.Processor.StorageDir)
-				closechan := make(chan struct{})
-				go processor.Start(closechan)
+				closeChan := make(chan struct{})
+				go processor.Start(closeChan)
 
 				<-sigCh
-				log.Println("[Main] Received Shutdown signal")
-				closechan <- struct{}{}
-				log.Println("[Main] Waiting for Processor...")
-				<-closechan
+				l.Println("Shutting down...")
+				closeChan <- struct{}{}
+				l.Println("Waiting for worker pools to finish...")
+				<-closeChan
+				l.Println("Bye!")
 				return nil
 			},
 			Before: BeforeCommand,
@@ -76,7 +98,6 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Bye!")
 }
 
 // BeforeCommand extracts configuration from the provided config file and initializes redis

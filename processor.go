@@ -1,3 +1,34 @@
+// processor is the main entity of the downloader.
+//
+// It is a service, facilitating the processing of Jobs.
+// Its main responsibility is to manage the creation and destruction of
+// WorkerPools, which actually perform the Job download process.
+//
+// Each WorkerPool processes jobs belonging to a single aggregation and is in
+// charge of imposing the corresponding rate-limit rules. Job routing for each
+// Aggregation is performed through a redis list which is popped periodically
+// by each WorkerPool. Popped jobs are then published to the WorkerPool's job
+// channel. WorkerPools spawn worker goroutines (up to a max concurrency limit
+// set for each aggregation) that consume from the aforementioned job channel
+// and perform the actual download.
+//
+//   -----------------------------------------
+//   |              Processor                |
+//   |                                       |
+//   |    ----------          ----------     |
+//   |    |   WP   |          |   WP   |     |
+//   |    |--------|          |--------|     |
+//   |    |   W    |          |  W  W  |     |
+//   |    | W   W  |          |  W  W  |     |
+//   |    ----------          ----------     |
+//   |                                       |
+//   -----------------------------------------
+//
+// Cancellation and shutdown are coordinated through the use of contexts all
+// along the stack.
+// When a shutdown signal is received from the application it propagates from
+// the processor to the active worker pools, stopping any in-progress jobs and
+// gracefully shutting down the corresponding workers.
 package main
 
 import (
@@ -21,49 +52,61 @@ func init() {
 	client = &http.Client{Transport: tr, Timeout: time.Duration(3) * time.Second}
 }
 
-// Processor is in charge of assigning worker pools to aggregations found in Redis and instrumenting them
+// Processor is in charge of scanning Redis for new aggregations and initiating
+// the corresponding WorkerPools when needed. It also manages and instruments
+// the WorkerPools.
 type Processor struct {
-	StorageDir   string
+	// StorageDir is the filesystem location where the actual downloads
+	// will be saved.
+	StorageDir string
+
+	// scanInterval is the amount of seconds to wait before re-scanning
+	// Redis for new Aggregations.
 	scanInterval int
-	pool         map[string]*WorkerPool
+
+	// pools contain the existing WorkerPools
+	pools map[string]*WorkerPool
 }
 
-// WorkerPool manages download goroutines and is responsible of enforcing rate limit quotas on its
-// aggregation
+// WorkerPool corresponds to an Aggregation. It spawns and instruments the
+// workers that perform the actual downloads and enforces the rate-limit rules
+// of the corresponding Aggregation.
 type WorkerPool struct {
 	Aggr          Aggregation
 	activeWorkers int32
-	jobChan       chan Job
-	shutdown      chan struct{}
+
+	// jobChan is the channel that distributes jobs to the respective
+	// workers
+	jobChan chan Job
+
+	shutdown chan struct{}
 }
 
-// NewWorkerPool creates a WorkerPool for the given Aggregation
+// NewWorkerPool initializes and returns a WorkerPool for aggr.
 func NewWorkerPool(aggr Aggregation) WorkerPool {
-	return WorkerPool{
-		activeWorkers: 0,
-		Aggr:          aggr,
-		jobChan:       make(chan Job),
-	}
+	return WorkerPool{Aggr: aggr, jobChan: make(chan Job)}
 }
 
-// IncreaseWorkers wraps atomic addition on ActiveWorkers counter
+// IncreaseWorkers atomically increases the activeWorkers counter of wp by 1
 func (wp *WorkerPool) IncreaseWorkers() {
 	atomic.AddInt32(&wp.activeWorkers, 1)
 }
 
-// DecreaseWorkers wraps atomic deduction on ActiveWorkers counter
+// DecreaseWorkers atomically decreases the activeWorkers counter of wp by 1
 func (wp *WorkerPool) DecreaseWorkers() {
 	atomic.AddInt32(&wp.activeWorkers, -1)
 }
 
-// ActiveWorkers wraps the atomic load operation and return the currently active
-// workers of the pool
+// ActiveWorkers return the number of existing active workers in wp.
 func (wp *WorkerPool) ActiveWorkers() int {
 	return int(atomic.LoadInt32(&wp.activeWorkers))
 }
 
-// Start encapsulates the main WorkerPool logic.
-// All Goroutine spawning, Job popping from Redis and signal handling is performed here.
+// Start starts wp. It is the core WorkerPool work loop. It can be stopped by
+// using ctx.
+//
+// All worker instrumentation, job popping from Redis and shutdown logic is
+// performed in Start.
 func (wp *WorkerPool) Start(ctx context.Context, savedir string) {
 	log.Printf("[WorkerPool %s] Working", wp.Aggr.ID)
 	var wg sync.WaitGroup
@@ -76,7 +119,7 @@ WORKERPOOL_LOOP:
 			close(wp.jobChan)
 			break WORKERPOOL_LOOP
 		default:
-			job, err := PopJob(jobKeyPrefix + wp.Aggr.ID)
+			job, err := wp.Aggr.PopJob()
 			if err != nil {
 				if err.Error() != "Queue is empty" {
 					log.Println(err)
@@ -100,7 +143,7 @@ WORKERPOOL_LOOP:
 	log.Printf("[WorkerPool %s] Closing", wp.Aggr.ID)
 }
 
-// work processes Jobs, consuming from the WorkerPool's jobChan
+// work consumes Jobs from wp and performs them.
 func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
 	for {
 		select {
@@ -112,21 +155,23 @@ func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
 	}
 }
 
-// NewProcessor acts as a constructor for the Processor struct
+// NewProcessor initializes and returns a Processor.
 func NewProcessor(scaninter int, storageDir string) Processor {
 	return Processor{
 		StorageDir:   storageDir,
 		scanInterval: scaninter,
-		pool:         make(map[string]*WorkerPool),
+		pools:        make(map[string]*WorkerPool),
 	}
 }
 
-// Start orchestrates the downloader.
-// It scans redis for new aggregations and creates worker pools to serve Jobs that belong to them.
+// Start starts p.
+//
+// It scans Redis for new Aggregations and spawns the corresponding worker
+// pools when needed.
 func (p *Processor) Start(closeCh chan struct{}) {
 	log.Println("[Processor] Starting")
 	workerClose := make(chan string)
-	var wpWG sync.WaitGroup
+	var wpWg sync.WaitGroup
 	scanTicker := time.NewTicker(time.Duration(p.scanInterval) * time.Second)
 	defer scanTicker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -137,7 +182,7 @@ PROCESSOR_LOOP:
 		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
 			log.Println("[Processor] Deleting worker for " + aggrID)
-			delete(p.pool, aggrID)
+			delete(p.pools, aggrID)
 
 		// Close signal from upper layer
 		case <-closeCh:
@@ -155,7 +200,7 @@ PROCESSOR_LOOP:
 
 				for _, ag := range keys {
 					aggrID := strings.TrimPrefix(ag, aggrKeyPrefix)
-					if _, ok := p.pool[aggrID]; !ok {
+					if _, ok := p.pools[aggrID]; !ok {
 
 						aggr, err := GetAggregation(aggrID)
 						if err != nil {
@@ -163,11 +208,11 @@ PROCESSOR_LOOP:
 							continue
 						}
 						wp := NewWorkerPool(aggr)
-						p.pool[aggrID] = &wp
-						wpWG.Add(1)
+						p.pools[aggrID] = &wp
+						wpWg.Add(1)
 
 						go func() {
-							defer wpWG.Done()
+							defer wpWg.Done()
 							wp.Start(ctx, p.StorageDir)
 							// The processor only needs to be informed about non-forced close ( without context-cancel )
 							if ctx.Err() == nil {
@@ -184,7 +229,7 @@ PROCESSOR_LOOP:
 		}
 	}
 
-	wpWG.Wait()
+	wpWg.Wait()
 	log.Println("[Processor] Closing")
 	closeCh <- struct{}{}
 	return

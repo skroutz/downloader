@@ -41,7 +41,8 @@ func TestPending(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testjob, err := PopJob(jobKeyPrefix + job.AggrID)
+	aggr := Aggregation{ID: job.AggrID}
+	testjob, err := aggr.PopJob()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +59,8 @@ func TestPending(t *testing.T) {
 func TestRetryAndFail(t *testing.T) {
 	job := GetTestJob()
 	job.Save()
+	aggr := Aggregation{ID: job.AggrID}
+
 	for i := 0; i <= maxRetries; i++ {
 		err := job.RetryOrFail("Test")
 		if err != nil {
@@ -65,7 +68,7 @@ func TestRetryAndFail(t *testing.T) {
 		}
 
 		if job.DownloadState != StateFailed {
-			job, err = PopJob(jobKeyPrefix + job.AggrID)
+			job, err = aggr.PopJob()
 			if err != nil {
 				t.Fatal(err)
 			}
