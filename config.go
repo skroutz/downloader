@@ -6,4 +6,8 @@ type Config struct {
 		Host string `json:"host"`
 		Port int    `json:"port"`
 	} `json:"redis"`
+
+	Processor struct {
+		StorageDir string `json:"storage_dir"`
+	} `json:"processor"`
 }

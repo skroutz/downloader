@@ -6,14 +6,14 @@ import (
 	"strconv"
 )
 
-func newServer(host string, port int) *http.Server {
+func NewAPIServer(host string, port int) *http.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/download/", HandleDownload)
+	mux.HandleFunc("/download/", handleDownload)
 	return &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 }
 
-// HandleDownload enqueues new downloads to the backend Redis instance
-func HandleDownload(w http.ResponseWriter, r *http.Request) {
+// handleDownload enqueues new downloads to the backend Redis instance
+func handleDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
