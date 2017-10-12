@@ -58,6 +58,10 @@ type Job struct {
 	CallbackURL   string `json:"callback_url"`
 	CallbackCount int    `json:"-"`
 	CallbackState State  `json:"-"`
+
+	// Contains arbitrary info provided by the caller that are posted
+	// back during the callback
+	Extra string `json:"extra"`
 }
 
 // Aggregation is the concept through which the rate limit rules are defined
@@ -253,6 +257,8 @@ func jobFromMap(m map[string]string) (Job, error) {
 			}
 		case "CallbackState":
 			j.CallbackState = State(v)
+		case "Extra":
+			j.Extra = v
 		default:
 			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
 		}
