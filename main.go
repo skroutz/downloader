@@ -95,6 +95,32 @@ func main() {
 			},
 			Before: BeforeCommand,
 		},
+		cli.Command{
+			Name: "notifier",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "config, c",
+					Usage: "`FILE` to load config from",
+					Value: "config.json",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+				l := log.New(os.Stderr, "[Notifier] ", log.Ldate|log.Ltime)
+				notifier := NewNotifier(10)
+				closeChan := make(chan struct{})
+				go notifier.Start(closeChan)
+
+				<-sigCh
+				l.Println("Shutting down...")
+				closeChan <- struct{}{}
+				l.Println("Waiting for the notifier to finish.")
+				<-closeChan
+				l.Println("Bye!")
+				return nil
+			},
+			Before: BeforeCommand,
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
