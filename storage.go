@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,7 +31,10 @@ const (
 	aggrKeyPrefix = "aggr:"
 	jobKeyPrefix  = "jobs:"
 
-	maxRetries = 3
+	callbackQueue = "CallbackQueue"
+
+	maxRetries   = 3
+	maxCBRetries = 2
 )
 
 // Job represents a user request for downloading a resource.
@@ -59,9 +64,17 @@ type Job struct {
 	CallbackCount int    `json:"-"`
 	CallbackState State  `json:"-"`
 
-	// Contains arbitrary info provided by the caller that are posted
+	// Contains arbitrary info provided by the user that are posted
 	// back during the callback
 	Extra string `json:"extra"`
+}
+
+// CallbackInfo holds the info to be posted back to the provided callback url of the caller
+type CallbackInfo struct {
+	Success     bool   `json:"success"`
+	Error       string `json:"error"`
+	Extra       string `json:"extra"`
+	DownloadURL string `json:"download_url"`
 }
 
 // Aggregation is the concept through which the rate limit rules are defined
@@ -181,6 +194,16 @@ func (j *Job) QueuePendingDownload() error {
 	return intcmd.Err()
 }
 
+// QueueForCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
+func (j *Job) QueueForCallback() error {
+	j.CallbackState = StatePending
+	err := j.Save()
+	if err != nil {
+		return err
+	}
+	return Redis.RPush(callbackQueue, j.ID).Err()
+}
+
 // SetStateWithMeta changes the current Job state to the provided value, updates the Meta field and reports any errors
 func (j *Job) SetStateWithMeta(state State, meta string) error {
 	j.DownloadState = state
@@ -189,9 +212,84 @@ func (j *Job) SetStateWithMeta(state State, meta string) error {
 }
 
 // SetState changes the current Job state to the provided value and reports any errors
-func (j *Job) SetState(state State) error {
+func (j *Job) SetState(state State, meta ...string) error {
 	j.DownloadState = state
 	return j.Save()
+}
+
+// SetCallbackStateWithMeta changes the current Job state to the provided value, updates the Meta field and reports any errors
+func (j *Job) SetCallbackStateWithMeta(state State, meta string) error {
+	j.CallbackState = state
+	j.Meta = meta
+	return j.Save()
+}
+
+// SetCallbackState changes the current Job state to the provided value and reports any errors
+func (j *Job) SetCallbackState(state State) error {
+	j.CallbackState = state
+	return j.Save()
+}
+
+// callbackInfo validates that the job is good for callback and
+// return callbackInfo to the caller
+func (j *Job) callbackInfo() (CallbackInfo, error) {
+	if j.DownloadState != StateSuccess && j.DownloadState != StateFailed {
+		return CallbackInfo{}, fmt.Errorf("Invalid Job State %s", j.DownloadState)
+	}
+
+	return CallbackInfo{
+		Success:     j.DownloadState == StateSuccess,
+		Error:       j.Meta,
+		Extra:       j.Extra,
+		DownloadURL: j.downloadURL(),
+	}, nil
+}
+
+// downloadURL constructs the actual download URL to be provided to the user.
+// TODO: Actually make it smart
+func (j *Job) downloadURL() string {
+	return fmt.Sprintf("http://localhost/%s", j.ID)
+}
+
+// PerformCallback posts callback info to the Job's CallbackURL
+// using the provided http.Client
+func (j *Job) PerformCallback(client *http.Client) {
+	cbInfo, err := j.callbackInfo()
+	if err != nil {
+		j.SetStateWithMeta(StateFailed, err.Error())
+		return
+	}
+
+	cb, err := json.Marshal(cbInfo)
+	if err != nil {
+		j.SetStateWithMeta(StateFailed, err.Error())
+		return
+	}
+
+	res, err := client.Post(j.CallbackURL, "application/json", bytes.NewBuffer(cb))
+	if err != nil || res.StatusCode < 200 || res.StatusCode >= 300 {
+		if err == nil {
+			err = fmt.Errorf("Received Status: %s", res.Status)
+		}
+		j.SetCallbackStateWithMeta(StateFailed, err.Error())
+		return
+	}
+
+	j.SetCallbackState(StateSuccess)
+}
+
+// PopCallback attempts to pop a Job from the callback queue.
+// If it succeeds the job with the popped ID is returned.
+func PopCallback() (Job, error) {
+	cmd := Redis.LPop(callbackQueue)
+	if err := cmd.Err(); err != nil {
+		if cmd.Err().Error() != "redis: nil" {
+			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
+		}
+		return Job{}, errors.New("Queue is empty")
+	}
+
+	return GetJob(cmd.Val())
 }
 
 // RetryOrFail checks the retry count of the current download
@@ -203,6 +301,17 @@ func (j *Job) RetryOrFail(err string) error {
 		return j.QueuePendingDownload()
 	}
 	return j.SetStateWithMeta(StateFailed, err)
+}
+
+// CBRetryOrFail checks the callback count of the current download
+// and retries the callback if its Retry Counts < maxRetries else it marks
+// it as failed
+func (j *Job) CBRetryOrFail(err string) error {
+	if j.CallbackCount < maxRetries {
+		j.CallbackCount++
+		return j.QueueForCallback()
+	}
+	return j.SetCallbackStateWithMeta(StateFailed, err)
 }
 
 func (j *Job) toMap() (map[string]interface{}, error) {
@@ -327,7 +436,6 @@ func (aggr *Aggregation) PopJob() (Job, error) {
 		if cmd.Err().Error() != "redis: nil" {
 			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
 		}
-		//No jobs popped
 		return Job{}, errors.New("Queue is empty")
 	}
 
