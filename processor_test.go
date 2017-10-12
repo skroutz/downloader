@@ -15,16 +15,6 @@ func init() {
 	Redis.FlushAll()
 }
 
-func TestProcessorOpenClose(t *testing.T) {
-	processor := NewProcessor(1, savedir)
-	closechan := make(chan struct{})
-	go processor.Start(closechan)
-
-	time.Sleep(1)
-	closechan <- struct{}{}
-	<-closechan
-}
-
 func TestProcessorFlow(t *testing.T) {
 	job := GetTestJob()
 	job.URL = "https://httpbin.org/image/png"
