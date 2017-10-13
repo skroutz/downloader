@@ -10,4 +10,8 @@ type Config struct {
 	Processor struct {
 		StorageDir string `json:"storage_dir"`
 	} `json:"processor"`
+
+	Notifier struct {
+		Concurrency int `json:"concurrency"`
+	} `json:"notifier"`
 }

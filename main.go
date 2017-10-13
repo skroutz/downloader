@@ -107,7 +107,7 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 				l := log.New(os.Stderr, "[Notifier] ", log.Ldate|log.Ltime)
-				notifier := NewNotifier(10)
+				notifier := NewNotifier(cfg.Notifier.Concurrency)
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan)
 
