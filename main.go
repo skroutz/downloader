@@ -26,7 +26,8 @@ func main() {
 
 	app.Commands = cli.Commands{
 		cli.Command{
-			Name: "api",
+			Name:  "api",
+			Usage: "Start the API web server",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "host",
@@ -68,7 +69,8 @@ func main() {
 			Before: BeforeCommand,
 		},
 		cli.Command{
-			Name: "processor",
+			Name:  "processor",
+			Usage: "Start the job processor",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "config, c",
