@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +19,12 @@ import (
 // State represents the download & callback states.
 // For valid values see constants below.
 type State string
+
+type QueueEmptyError string
+
+func (err QueueEmptyError) Error() string {
+	return fmt.Sprintf("Queue %s is empty", err)
+}
 
 const (
 	// Valid State values
@@ -286,7 +291,7 @@ func PopCallback() (Job, error) {
 		if cmd.Err().Error() != "redis: nil" {
 			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
 		}
-		return Job{}, errors.New("Queue is empty")
+		return Job{}, QueueEmptyError(callbackQueue)
 	}
 
 	return GetJob(cmd.Val())
@@ -436,7 +441,7 @@ func (aggr *Aggregation) PopJob() (Job, error) {
 		if cmd.Err().Error() != "redis: nil" {
 			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
 		}
-		return Job{}, errors.New("Queue is empty")
+		return Job{}, QueueEmptyError(aggr.RedisJobsKey())
 	}
 
 	return GetJob(cmd.Val())

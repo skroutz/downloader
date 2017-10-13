@@ -121,7 +121,9 @@ WORKERPOOL_LOOP:
 		default:
 			job, err := wp.Aggr.PopJob()
 			if err != nil {
-				if err.Error() != "Queue is empty" {
+				if _, ok := err.(QueueEmptyError); ok {
+					time.Sleep(time.Second)
+				} else {
 					log.Println(err)
 				}
 				continue
