@@ -45,6 +45,11 @@ import (
 	"time"
 )
 
+const (
+	workerMaxInactivity = 5 * time.Second
+	backoffDuration     = 1 * time.Second
+)
+
 var client *http.Client
 
 func init() {
@@ -131,10 +136,12 @@ WORKERPOOL_LOOP:
 			job, err := wp.Aggr.PopJob()
 			if err != nil {
 				if _, ok := err.(QueueEmptyError); ok {
-					time.Sleep(time.Second)
+					// No job found, backing off
+					time.Sleep(backoffDuration)
 				} else {
 					log.Println(err)
 				}
+
 				continue
 			}
 			if wp.ActiveWorkers() < wp.Aggr.Limit {
@@ -156,12 +163,21 @@ WORKERPOOL_LOOP:
 
 // work consumes Jobs from wp and performs them.
 func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
+	lastActive := time.Now()
+
 	for {
 		select {
 		case job := <-wp.jobChan:
 			job.Perform(ctx, saveDir)
+			lastActive = time.Now()
 		default:
-			return
+			if time.Now().Sub(lastActive) > workerMaxInactivity {
+				log.Printf("[WorkerPool %s][Worker] Bye!", wp.Aggr.ID)
+				return
+			}
+
+			// No job found, backing off
+			time.Sleep(backoffDuration)
 		}
 	}
 }
