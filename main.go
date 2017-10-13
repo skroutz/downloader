@@ -37,7 +37,7 @@ func main() {
 				cli.IntFlag{
 					Name:  "port, p",
 					Usage: "`PORT` to listen on",
-					Value: 80,
+					Value: 8000,
 				},
 				cli.StringFlag{
 					Name:  "config, c",
