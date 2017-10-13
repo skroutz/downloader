@@ -149,7 +149,7 @@ func (j *Job) Perform(ctx context.Context, saveDir string) {
 	resp, err := client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = j.SetStateWithMeta(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
+			err = j.SetState(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
 			if err != nil {
 				log.Println(err)
 			}
@@ -164,7 +164,7 @@ func (j *Job) Perform(ctx context.Context, saveDir string) {
 		j.RetryOrFail(fmt.Sprintf("Received status code %s", resp.Status))
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-		j.SetStateWithMeta(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
+		j.SetState(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
 		return
 	}
 	defer resp.Body.Close()
@@ -209,29 +209,17 @@ func (j *Job) QueueForCallback() error {
 	return Redis.RPush(callbackQueue, j.ID).Err()
 }
 
-// SetStateWithMeta changes the current Job state to the provided value, updates the Meta field and reports any errors
-func (j *Job) SetStateWithMeta(state State, meta string) error {
-	j.DownloadState = state
-	j.Meta = meta
-	return j.Save()
-}
-
 // SetState changes the current Job state to the provided value and reports any errors
 func (j *Job) SetState(state State, meta ...string) error {
 	j.DownloadState = state
-	return j.Save()
-}
-
-// SetCallbackStateWithMeta changes the current Job state to the provided value, updates the Meta field and reports any errors
-func (j *Job) SetCallbackStateWithMeta(state State, meta string) error {
-	j.CallbackState = state
-	j.Meta = meta
+	j.Meta = strings.Join(meta, "\n")
 	return j.Save()
 }
 
 // SetCallbackState changes the current Job state to the provided value and reports any errors
-func (j *Job) SetCallbackState(state State) error {
+func (j *Job) SetCallbackState(state State, meta ...string) error {
 	j.CallbackState = state
+	j.Meta = strings.Join(meta, "\n")
 	return j.Save()
 }
 
@@ -261,13 +249,13 @@ func (j *Job) downloadURL() string {
 func (j *Job) PerformCallback(client *http.Client) {
 	cbInfo, err := j.callbackInfo()
 	if err != nil {
-		j.SetStateWithMeta(StateFailed, err.Error())
+		j.SetState(StateFailed, err.Error())
 		return
 	}
 
 	cb, err := json.Marshal(cbInfo)
 	if err != nil {
-		j.SetStateWithMeta(StateFailed, err.Error())
+		j.SetState(StateFailed, err.Error())
 		return
 	}
 
@@ -276,7 +264,7 @@ func (j *Job) PerformCallback(client *http.Client) {
 		if err == nil {
 			err = fmt.Errorf("Received Status: %s", res.Status)
 		}
-		j.SetCallbackStateWithMeta(StateFailed, err.Error())
+		j.SetCallbackState(StateFailed, err.Error())
 		return
 	}
 
@@ -305,7 +293,7 @@ func (j *Job) RetryOrFail(err string) error {
 		j.RetryCount++
 		return j.QueuePendingDownload()
 	}
-	return j.SetStateWithMeta(StateFailed, err)
+	return j.SetState(StateFailed, err)
 }
 
 // CBRetryOrFail checks the callback count of the current download
@@ -316,7 +304,7 @@ func (j *Job) CBRetryOrFail(err string) error {
 		j.CallbackCount++
 		return j.QueueForCallback()
 	}
-	return j.SetCallbackStateWithMeta(StateFailed, err)
+	return j.SetCallbackState(StateFailed, err)
 }
 
 func (j *Job) toMap() (map[string]interface{}, error) {
