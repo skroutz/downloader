@@ -261,5 +261,4 @@ PROCESSOR_LOOP:
 	wpWg.Wait()
 	p.Log.Println("Shutting down...")
 	closeCh <- struct{}{}
-	return
 }
