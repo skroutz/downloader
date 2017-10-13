@@ -81,7 +81,10 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 				l := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
-				processor := NewProcessor(3, cfg.Processor.StorageDir)
+				processor, err := NewProcessor(3, cfg.Processor.StorageDir)
+				if err != nil {
+					return err
+				}
 				closeChan := make(chan struct{})
 				go processor.Start(closeChan)
 

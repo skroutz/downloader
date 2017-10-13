@@ -35,8 +35,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -154,13 +156,34 @@ func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
 	}
 }
 
-// NewProcessor initializes and returns a Processor.
-func NewProcessor(scaninter int, storageDir string) Processor {
+// NewProcessor initializes and returns a Processor, or an error if storageDir
+// is not writable.
+func NewProcessor(scaninter int, storageDir string) (Processor, error) {
+	// verify we can write to storageDir
+	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
+	if err != nil {
+		return Processor{}, err
+	}
+	_, err = tmpf.Write([]byte("a"))
+	if err != nil {
+		tmpf.Close()
+		os.Remove(tmpf.Name())
+		return Processor{}, err
+	}
+	err = tmpf.Close()
+	if err != nil {
+		return Processor{}, err
+	}
+	err = os.Remove(tmpf.Name())
+	if err != nil {
+		return Processor{}, err
+	}
+
 	return Processor{
 		storageDir:   storageDir,
 		scanInterval: scaninter,
 		pools:        make(map[string]*WorkerPool),
-	}
+	}, nil
 }
 
 // Start starts p.
