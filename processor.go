@@ -46,19 +46,18 @@ import (
 var client *http.Client
 
 func init() {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
-	client = &http.Client{Transport: tr, Timeout: time.Duration(3) * time.Second}
+	client = &http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+		Timeout:   time.Duration(3) * time.Second}
 }
 
 // Processor is in charge of scanning Redis for new aggregations and initiating
 // the corresponding WorkerPools when needed. It also manages and instruments
 // the WorkerPools.
 type Processor struct {
-	// StorageDir is the filesystem location where the actual downloads
+	// storageDir is the filesystem location where the actual downloads
 	// will be saved.
-	StorageDir string
+	storageDir string
 
 	// scanInterval is the amount of seconds to wait before re-scanning
 	// Redis for new Aggregations.
@@ -87,13 +86,13 @@ func NewWorkerPool(aggr Aggregation) WorkerPool {
 	return WorkerPool{Aggr: aggr, jobChan: make(chan Job)}
 }
 
-// IncreaseWorkers atomically increases the activeWorkers counter of wp by 1
-func (wp *WorkerPool) IncreaseWorkers() {
+// increaseWorkers atomically increases the activeWorkers counter of wp by 1
+func (wp *WorkerPool) increaseWorkers() {
 	atomic.AddInt32(&wp.activeWorkers, 1)
 }
 
-// DecreaseWorkers atomically decreases the activeWorkers counter of wp by 1
-func (wp *WorkerPool) DecreaseWorkers() {
+// decreaseWorkers atomically decreases the activeWorkers counter of wp by 1
+func (wp *WorkerPool) decreaseWorkers() {
 	atomic.AddInt32(&wp.activeWorkers, -1)
 }
 
@@ -107,7 +106,7 @@ func (wp *WorkerPool) ActiveWorkers() int {
 //
 // All worker instrumentation, job popping from Redis and shutdown logic is
 // performed in Start.
-func (wp *WorkerPool) Start(ctx context.Context, savedir string) {
+func (wp *WorkerPool) Start(ctx context.Context, storageDir string) {
 	log.Printf("[WorkerPool %s] Working", wp.Aggr.ID)
 	var wg sync.WaitGroup
 
@@ -130,9 +129,9 @@ WORKERPOOL_LOOP:
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					defer wp.DecreaseWorkers()
-					wp.IncreaseWorkers()
-					wp.work(ctx, savedir)
+					defer wp.decreaseWorkers()
+					wp.increaseWorkers()
+					wp.work(ctx, storageDir)
 				}()
 			}
 			wp.jobChan <- job
@@ -158,7 +157,7 @@ func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
 // NewProcessor initializes and returns a Processor.
 func NewProcessor(scaninter int, storageDir string) Processor {
 	return Processor{
-		StorageDir:   storageDir,
+		storageDir:   storageDir,
 		scanInterval: scaninter,
 		pools:        make(map[string]*WorkerPool),
 	}
@@ -213,7 +212,7 @@ PROCESSOR_LOOP:
 
 						go func() {
 							defer wpWg.Done()
-							wp.Start(ctx, p.StorageDir)
+							wp.Start(ctx, p.storageDir)
 							// The processor only needs to be informed about non-forced close ( without context-cancel )
 							if ctx.Err() == nil {
 								workerClose <- wp.Aggr.ID
