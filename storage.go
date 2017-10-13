@@ -289,22 +289,22 @@ func PopCallback() (Job, error) {
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
 func (j *Job) RetryOrFail(err string) error {
-	if j.RetryCount < maxRetries {
-		j.RetryCount++
-		return j.QueuePendingDownload()
+	if j.RetryCount >= maxRetries {
+		return j.SetState(StateFailed, err)
 	}
-	return j.SetState(StateFailed, err)
+	j.RetryCount++
+	return j.QueuePendingDownload()
 }
 
 // CBRetryOrFail checks the callback count of the current download
 // and retries the callback if its Retry Counts < maxRetries else it marks
 // it as failed
 func (j *Job) CBRetryOrFail(err string) error {
-	if j.CallbackCount < maxRetries {
-		j.CallbackCount++
-		return j.QueueForCallback()
+	if j.CallbackCount >= maxRetries {
+		return j.SetCallbackState(StateFailed, err)
 	}
-	return j.SetCallbackState(StateFailed, err)
+	j.CallbackCount++
+	return j.QueueForCallback()
 }
 
 func (j *Job) toMap() (map[string]interface{}, error) {
