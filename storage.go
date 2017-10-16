@@ -247,6 +247,7 @@ func (j *Job) downloadURL() string {
 // PerformCallback posts callback info to the Job's CallbackURL
 // using the provided http.Client
 func (j *Job) PerformCallback(client *http.Client) {
+	j.SetCallbackState(StateInProgress)
 	cbInfo, err := j.callbackInfo()
 	if err != nil {
 		j.SetState(StateFailed, err.Error())
