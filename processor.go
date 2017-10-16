@@ -35,8 +35,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,19 +48,18 @@ import (
 var client *http.Client
 
 func init() {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
-	client = &http.Client{Transport: tr, Timeout: time.Duration(3) * time.Second}
+	client = &http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+		Timeout:   time.Duration(3) * time.Second}
 }
 
 // Processor is in charge of scanning Redis for new aggregations and initiating
 // the corresponding WorkerPools when needed. It also manages and instruments
 // the WorkerPools.
 type Processor struct {
-	// StorageDir is the filesystem location where the actual downloads
+	// storageDir is the filesystem location where the actual downloads
 	// will be saved.
-	StorageDir string
+	storageDir string
 
 	// scanInterval is the amount of seconds to wait before re-scanning
 	// Redis for new Aggregations.
@@ -66,6 +67,8 @@ type Processor struct {
 
 	// pools contain the existing WorkerPools
 	pools map[string]*WorkerPool
+
+	Log *log.Logger
 }
 
 // WorkerPool corresponds to an Aggregation. It spawns and instruments the
@@ -74,26 +77,31 @@ type Processor struct {
 type WorkerPool struct {
 	Aggr          Aggregation
 	activeWorkers int32
+	shutdown      chan struct{}
+	log           *log.Logger
 
 	// jobChan is the channel that distributes jobs to the respective
 	// workers
 	jobChan chan Job
-
-	shutdown chan struct{}
 }
 
 // NewWorkerPool initializes and returns a WorkerPool for aggr.
 func NewWorkerPool(aggr Aggregation) WorkerPool {
-	return WorkerPool{Aggr: aggr, jobChan: make(chan Job)}
+	logPrefix := fmt.Sprintf("[Processor][WorkerPool:%s] ", aggr.ID)
+
+	return WorkerPool{
+		Aggr:    aggr,
+		jobChan: make(chan Job),
+		log:     log.New(os.Stderr, logPrefix, log.Ldate|log.Ltime)}
 }
 
-// IncreaseWorkers atomically increases the activeWorkers counter of wp by 1
-func (wp *WorkerPool) IncreaseWorkers() {
+// increaseWorkers atomically increases the activeWorkers counter of wp by 1
+func (wp *WorkerPool) increaseWorkers() {
 	atomic.AddInt32(&wp.activeWorkers, 1)
 }
 
-// DecreaseWorkers atomically decreases the activeWorkers counter of wp by 1
-func (wp *WorkerPool) DecreaseWorkers() {
+// decreaseWorkers atomically decreases the activeWorkers counter of wp by 1
+func (wp *WorkerPool) decreaseWorkers() {
 	atomic.AddInt32(&wp.activeWorkers, -1)
 }
 
@@ -107,15 +115,16 @@ func (wp *WorkerPool) ActiveWorkers() int {
 //
 // All worker instrumentation, job popping from Redis and shutdown logic is
 // performed in Start.
-func (wp *WorkerPool) Start(ctx context.Context, savedir string) {
-	log.Printf("[WorkerPool %s] Working", wp.Aggr.ID)
+func (wp *WorkerPool) Start(ctx context.Context, storageDir string) {
+	wp.log.Printf("Started working...")
+
 	var wg sync.WaitGroup
 
 WORKERPOOL_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[WorkerPool %s] Received shutdown", wp.Aggr.ID)
+			wp.log.Printf("Received shutdown signal...")
 			close(wp.jobChan)
 			break WORKERPOOL_LOOP
 		default:
@@ -132,9 +141,9 @@ WORKERPOOL_LOOP:
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					defer wp.DecreaseWorkers()
-					wp.IncreaseWorkers()
-					wp.work(ctx, savedir)
+					defer wp.decreaseWorkers()
+					wp.increaseWorkers()
+					wp.work(ctx, storageDir)
 				}()
 			}
 			wp.jobChan <- job
@@ -142,7 +151,7 @@ WORKERPOOL_LOOP:
 	}
 
 	wg.Wait()
-	log.Printf("[WorkerPool %s] Closing", wp.Aggr.ID)
+	wp.log.Printf("Closing...")
 }
 
 // work consumes Jobs from wp and performs them.
@@ -157,13 +166,34 @@ func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
 	}
 }
 
-// NewProcessor initializes and returns a Processor.
-func NewProcessor(scaninter int, storageDir string) Processor {
+// NewProcessor initializes and returns a Processor, or an error if storageDir
+// is not writable.
+func NewProcessor(scaninter int, storageDir string) (Processor, error) {
+	// verify we can write to storageDir
+	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
+	if err != nil {
+		return Processor{}, err
+	}
+	_, err = tmpf.Write([]byte("a"))
+	if err != nil {
+		tmpf.Close()
+		os.Remove(tmpf.Name())
+		return Processor{}, err
+	}
+	err = tmpf.Close()
+	if err != nil {
+		return Processor{}, err
+	}
+	err = os.Remove(tmpf.Name())
+	if err != nil {
+		return Processor{}, err
+	}
+
 	return Processor{
-		StorageDir:   storageDir,
+		storageDir:   storageDir,
 		scanInterval: scaninter,
 		pools:        make(map[string]*WorkerPool),
-	}
+		Log:          log.New(os.Stderr, "[Processor] ", log.Ldate|log.Ltime)}, nil
 }
 
 // Start starts p.
@@ -171,7 +201,7 @@ func NewProcessor(scaninter int, storageDir string) Processor {
 // It scans Redis for new Aggregations and spawns the corresponding worker
 // pools when needed.
 func (p *Processor) Start(closeCh chan struct{}) {
-	log.Println("[Processor] Starting")
+	p.Log.Println("Starting...")
 	workerClose := make(chan string)
 	var wpWg sync.WaitGroup
 	scanTicker := time.NewTicker(time.Duration(p.scanInterval) * time.Second)
@@ -183,9 +213,8 @@ PROCESSOR_LOOP:
 		select {
 		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
-			log.Println("[Processor] Deleting worker for " + aggrID)
+			p.Log.Println("Deleting worker for " + aggrID)
 			delete(p.pools, aggrID)
-
 		// Close signal from upper layer
 		case <-closeCh:
 			cancel()
@@ -196,17 +225,16 @@ PROCESSOR_LOOP:
 				var keys []string
 				var err error
 				if keys, cursor, err = Redis.Scan(cursor, aggrKeyPrefix+"*", 50).Result(); err != nil {
-					log.Println(fmt.Errorf("[Processor] Could not scan keys: %v", err))
+					p.Log.Println(fmt.Errorf("Could not scan keys: %v", err))
 					break
 				}
 
 				for _, ag := range keys {
 					aggrID := strings.TrimPrefix(ag, aggrKeyPrefix)
 					if _, ok := p.pools[aggrID]; !ok {
-
 						aggr, err := GetAggregation(aggrID)
 						if err != nil {
-							log.Printf("[Processor] Could not get aggregation %s : %v", aggrID, err)
+							p.Log.Printf("Could not get aggregation %s: %v", aggrID, err)
 							continue
 						}
 						wp := NewWorkerPool(aggr)
@@ -215,7 +243,7 @@ PROCESSOR_LOOP:
 
 						go func() {
 							defer wpWg.Done()
-							wp.Start(ctx, p.StorageDir)
+							wp.Start(ctx, p.storageDir)
 							// The processor only needs to be informed about non-forced close ( without context-cancel )
 							if ctx.Err() == nil {
 								workerClose <- wp.Aggr.ID
@@ -232,7 +260,6 @@ PROCESSOR_LOOP:
 	}
 
 	wpWg.Wait()
-	log.Println("[Processor] Closing")
+	p.Log.Println("Shutting down...")
 	closeCh <- struct{}{}
-	return
 }

@@ -27,18 +27,24 @@ func (err QueueEmptyError) Error() string {
 }
 
 const (
-	// Valid State values
+	// The available states of a job's DownloadState/CallbackState.
 	StatePending    = "Pending"
 	StateFailed     = "Failed"
 	StateSuccess    = "Success"
 	StateInProgress = "InProgress"
 
+	// Each aggregation has a corresponding Redis Hash named in the form
+	// "aggr:<aggregation-id>" and containing various information about
+	// the aggregation itself (eg. its limit).
 	aggrKeyPrefix = "aggr:"
-	jobKeyPrefix  = "jobs:"
-
+  
+	// Individual job IDs of an aggregation exist in a Redis List named
+	// in the form "jobs:<aggregation-id>".
+	jobKeyPrefix = "jobs:"
+  
 	callbackQueue = "CallbackQueue"
 
-	maxRetries   = 3
+	maxDownloadRetries = 3
 	maxCBRetries = 2
 )
 
@@ -298,7 +304,7 @@ func PopCallback() (Job, error) {
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
 func (j *Job) RetryOrFail(err string) error {
-	if j.RetryCount >= maxRetries {
+	if j.RetryCount >= maxDownloadRetries {
 		return j.SetState(StateFailed, err)
 	}
 	j.RetryCount++

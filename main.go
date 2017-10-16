@@ -80,17 +80,19 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-				l := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
-				processor := NewProcessor(3, cfg.Processor.StorageDir)
+				processor, err := NewProcessor(3, cfg.Processor.StorageDir)
+				if err != nil {
+					return err
+				}
 				closeChan := make(chan struct{})
 				go processor.Start(closeChan)
 
 				<-sigCh
-				l.Println("Shutting down...")
+				processor.Log.Println("Shutting down...")
 				closeChan <- struct{}{}
-				l.Println("Waiting for worker pools to finish...")
+				processor.Log.Println("Waiting for worker pools to finish...")
 				<-closeChan
-				l.Println("Bye!")
+				processor.Log.Println("Bye!")
 				return nil
 			},
 			Before: BeforeCommand,

@@ -26,7 +26,10 @@ func TestProcessorFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor := NewProcessor(1, savedir)
+	processor, err := NewProcessor(1, savedir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	closeChan := make(chan struct{})
 
 	go processor.Start(closeChan)
