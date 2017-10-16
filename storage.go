@@ -20,16 +20,22 @@ import (
 type State string
 
 const (
-	// Valid State values
+	// The available states of a job's DownloadState/CallbackState.
 	StatePending    = "Pending"
 	StateFailed     = "Failed"
 	StateSuccess    = "Success"
 	StateInProgress = "InProgress"
 
+	// Each aggregation has a corresponding Redis Hash named in the form
+	// "aggr:<aggregation-id>" and containing various information about
+	// the aggregation itself (eg. its limit).
 	aggrKeyPrefix = "aggr:"
-	jobKeyPrefix  = "jobs:"
 
-	maxRetries = 3
+	// Individual job IDs of an aggregation exist in a Redis List named
+	// in the form "jobs:<aggregation-id>".
+	jobKeyPrefix = "jobs:"
+
+	maxDownloadRetries = 3
 )
 
 // Job represents a user request for downloading a resource.
@@ -194,7 +200,7 @@ func (j *Job) SetState(state State) error {
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
 func (j *Job) RetryOrFail(err string) error {
-	if j.RetryCount < maxRetries {
+	if j.RetryCount < maxDownloadRetries {
 		j.RetryCount++
 		return j.QueuePendingDownload()
 	}

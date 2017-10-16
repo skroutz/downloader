@@ -61,7 +61,7 @@ func TestRetryAndFail(t *testing.T) {
 	job.Save()
 	aggr := Aggregation{ID: job.AggrID}
 
-	for i := 0; i <= maxRetries; i++ {
+	for i := 0; i <= maxDownloadRetries; i++ {
 		err := job.RetryOrFail("Test")
 		if err != nil {
 			t.Fatal(err)
