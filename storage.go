@@ -299,11 +299,7 @@ func PopCallback() (Job, error) {
 // it as failed
 func (j *Job) RetryOrFail(err string) error {
 	if j.RetryCount >= maxRetries {
-		if err := j.SetState(StateFailed, err); err != nil {
-			return err
-		}
-		return j.QueuePendingCallback()
-
+		return j.SetState(StateFailed, err)
 	}
 	j.RetryCount++
 	return j.QueuePendingDownload()
