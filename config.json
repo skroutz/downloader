@@ -5,5 +5,8 @@
 	},
 	"processor": {
 		"storage_dir":"/tmp/"
+	},
+	"notifier": {
+		"concurrency": 10
 	}
 }
