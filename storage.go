@@ -174,7 +174,15 @@ func (j *Job) Perform(ctx context.Context, saveDir string) {
 		j.RetryOrFail(fmt.Sprintf("Could not download file, %v", err))
 		return
 	}
-	j.SetState(StateSuccess)
+
+	if err = j.SetState(StateSuccess); err != nil {
+		log.Println(err)
+		return
+	}
+
+	if err = j.QueuePendingCallback(); err != nil {
+		log.Println(err)
+	}
 }
 
 // Exists checks if a job exists in Redis
@@ -291,7 +299,11 @@ func PopCallback() (Job, error) {
 // it as failed
 func (j *Job) RetryOrFail(err string) error {
 	if j.RetryCount >= maxRetries {
-		return j.SetState(StateFailed, err)
+		if err := j.SetState(StateFailed, err); err != nil {
+			return err
+		}
+		return j.QueuePendingCallback()
+
 	}
 	j.RetryCount++
 	return j.QueuePendingDownload()
