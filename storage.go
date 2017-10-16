@@ -313,7 +313,7 @@ func (j *Job) RetryOrFail(err string) error {
 // and retries the callback if its Retry Counts < maxRetries else it marks
 // it as failed
 func (j *Job) CBRetryOrFail(err string) error {
-	if j.CallbackCount >= maxRetries {
+	if j.CallbackCount >= maxCBRetries {
 		return j.SetCallbackState(StateFailed, err)
 	}
 	j.CallbackCount++
