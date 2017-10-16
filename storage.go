@@ -199,8 +199,8 @@ func (j *Job) QueuePendingDownload() error {
 	return intcmd.Err()
 }
 
-// QueueForCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
-func (j *Job) QueueForCallback() error {
+// QueuePendingCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
+func (j *Job) QueuePendingCallback() error {
 	j.CallbackState = StatePending
 	err := j.Save()
 	if err != nil {
@@ -305,7 +305,7 @@ func (j *Job) CBRetryOrFail(err string) error {
 		return j.SetCallbackState(StateFailed, err)
 	}
 	j.CallbackCount++
-	return j.QueueForCallback()
+	return j.QueuePendingCallback()
 }
 
 func (j *Job) toMap() (map[string]interface{}, error) {
