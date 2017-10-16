@@ -230,7 +230,6 @@ PROCESSOR_LOOP:
 				for _, ag := range keys {
 					aggrID := strings.TrimPrefix(ag, aggrKeyPrefix)
 					if _, ok := p.pools[aggrID]; !ok {
-
 						aggr, err := GetAggregation(aggrID)
 						if err != nil {
 							p.Log.Printf("Could not get aggregation %s: %v", aggrID, err)
