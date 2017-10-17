@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -37,15 +35,15 @@ const (
 	// "aggr:<aggregation-id>" and containing various information about
 	// the aggregation itself (eg. its limit).
 	aggrKeyPrefix = "aggr:"
-  
+
 	// Individual job IDs of an aggregation exist in a Redis List named
 	// in the form "jobs:<aggregation-id>".
 	jobKeyPrefix = "jobs:"
-  
+
 	callbackQueue = "CallbackQueue"
 
 	maxDownloadRetries = 3
-	maxCBRetries = 2
+	maxCBRetries       = 2
 )
 
 // Job represents a user request for downloading a resource.
@@ -256,34 +254,6 @@ func (j *Job) callbackInfo() (CallbackInfo, error) {
 // TODO: Actually make it smart
 func (j *Job) downloadURL() string {
 	return fmt.Sprintf("http://localhost/%s", j.ID)
-}
-
-// PerformCallback posts callback info to the Job's CallbackURL
-// using the provided http.Client
-func (j *Job) PerformCallback(client *http.Client) {
-	j.SetCallbackState(StateInProgress)
-	cbInfo, err := j.callbackInfo()
-	if err != nil {
-		j.SetState(StateFailed, err.Error())
-		return
-	}
-
-	cb, err := json.Marshal(cbInfo)
-	if err != nil {
-		j.SetState(StateFailed, err.Error())
-		return
-	}
-
-	res, err := client.Post(j.CallbackURL, "application/json", bytes.NewBuffer(cb))
-	if err != nil || res.StatusCode < 200 || res.StatusCode >= 300 {
-		if err == nil {
-			err = fmt.Errorf("Received Status: %s", res.Status)
-		}
-		j.SetCallbackState(StateFailed, err.Error())
-		return
-	}
-
-	j.SetCallbackState(StateSuccess)
 }
 
 // PopCallback attempts to pop a Job from the callback queue.

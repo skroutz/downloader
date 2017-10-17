@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -9,7 +12,8 @@ import (
 )
 
 // Notifier is the the component responsible for consuming the result of jobs
-// and notifying back the respective users by issuing HTTP requests to their callback URLs.
+// and notifying back the respective users by issuing HTTP requests to their
+// provided callback URLs.
 type Notifier struct {
 	concurrency int
 	client      *http.Client
@@ -30,8 +34,8 @@ func NewNotifier(concurrency int) Notifier {
 	}
 }
 
-// Start starts the Notifier service.
-// All callbacker instrumentation is performed here.
+// Start starts the Notifier loop and instruments the worker goroutines that
+// perform the actual notify requests.
 func (n *Notifier) Start(closeChan chan struct{}) {
 	var wg sync.WaitGroup
 	wg.Add(n.concurrency)
@@ -39,7 +43,7 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 		go func() {
 			defer wg.Done()
 			for job := range n.cbChan {
-				job.PerformCallback(n.client)
+				n.Notify(&job)
 			}
 
 		}()
@@ -65,4 +69,32 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 			n.cbChan <- job
 		}
 	}
+}
+
+// Notify posts callback info to the Job's CallbackURL
+// using the provided http.Client
+func (n *Notifier) Notify(j *Job) {
+	j.SetCallbackState(StateInProgress)
+	cbInfo, err := j.callbackInfo()
+	if err != nil {
+		j.SetState(StateFailed, err.Error())
+		return
+	}
+
+	cb, err := json.Marshal(cbInfo)
+	if err != nil {
+		j.SetState(StateFailed, err.Error())
+		return
+	}
+
+	res, err := n.client.Post(j.CallbackURL, "application/json", bytes.NewBuffer(cb))
+	if err != nil || res.StatusCode < 200 || res.StatusCode >= 300 {
+		if err == nil {
+			err = fmt.Errorf("Received Status: %s", res.Status)
+		}
+		j.SetCallbackState(StateFailed, err.Error())
+		return
+	}
+
+	j.SetCallbackState(StateSuccess)
 }
