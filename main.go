@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/urfave/cli"
 )
@@ -80,7 +82,11 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-				processor, err := NewProcessor(3, cfg.Processor.StorageDir)
+				logger := log.New(os.Stderr, "[Processor] ", log.Ldate|log.Ltime)
+				client := &http.Client{
+					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+					Timeout:   time.Duration(3) * time.Second}
+				processor, err := NewProcessor(3, cfg.Processor.StorageDir, client, logger)
 				if err != nil {
 					return err
 				}

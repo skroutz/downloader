@@ -1,12 +1,7 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -31,8 +26,6 @@ const (
 	jobKeyPrefix = "jobs:"
 
 	callbackQueue = "CallbackQueue"
-
-	maxDownloadRetries = 3
 )
 
 // CallbackInfo holds the info to be posted back to the provided callback url of the caller
@@ -135,62 +128,6 @@ func jobFromMap(m map[string]string) (Job, error) {
 func GetJob(id string) (Job, error) {
 	cmd := Redis.HGetAll(id)
 	return jobFromMap(cmd.Val())
-}
-
-// Perform downloads the resource denoted by j.URL and updates its state in
-// Redis accordingly. It may retry downloading on certain errors.
-func (j *Job) Perform(ctx context.Context, saveDir string) {
-	j.SetState(StateInProgress)
-	out, err := os.Create(saveDir + j.ID)
-	if err != nil {
-		j.RetryOrFail(fmt.Sprintf("Could not write to file, %v", err))
-		return
-	}
-	defer out.Close()
-
-	req, err := http.NewRequest("GET", j.URL, nil)
-	if err != nil {
-		j.RetryOrFail(fmt.Sprintf("Could not create request, %v", err))
-		return
-	}
-
-	resp, err := client.Do(req.WithContext(ctx))
-	if err != nil {
-		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = j.SetState(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
-			if err != nil {
-				log.Println(err)
-			}
-			return
-		}
-
-		j.RetryOrFail(err.Error())
-		return
-	}
-
-	if resp.StatusCode >= http.StatusInternalServerError {
-		j.RetryOrFail(fmt.Sprintf("Received status code %s", resp.Status))
-		return
-	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-		j.SetState(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
-		return
-	}
-	defer resp.Body.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		j.RetryOrFail(fmt.Sprintf("Could not download file, %v", err))
-		return
-	}
-
-	if err = j.SetState(StateSuccess); err != nil {
-		log.Println(err)
-		return
-	}
-
-	if err = j.QueuePendingCallback(); err != nil {
-		log.Println(err)
-	}
 }
 
 // Exists checks if a job exists in Redis

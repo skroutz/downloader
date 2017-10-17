@@ -1,14 +1,39 @@
-// processor is the main entity of the downloader.
-//
-// It is a service, facilitating the processing of Jobs.
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// TODO: these should all be configuration options provided by the caller
+const (
+	workerMaxInactivity = 5 * time.Second
+	backoffDuration     = 1 * time.Second
+
+	// TODO: rename to MaxRetries when this is extracted into its own
+	// package
+	MaxDownloadRetries = 3
+)
+
+// Processor is one of the core entities of the downloader. It facilitates the
+// processing of Jobs.
 // Its main responsibility is to manage the creation and destruction of
-// WorkerPools, which actually perform the Job download process.
+// workerPools, which actually perform the Job download process.
 //
 // Each WorkerPool processes jobs belonging to a single aggregation and is in
 // charge of imposing the corresponding rate-limit rules. Job routing for each
 // Aggregation is performed through a redis list which is popped periodically
 // by each WorkerPool. Popped jobs are then published to the WorkerPool's job
-// channel. WorkerPools spawn worker goroutines (up to a max concurrency limit
+// channel. worker pools spawn worker goroutines (up to a max concurrency limit
 // set for each aggregation) that consume from the aforementioned job channel
 // and perform the actual download.
 //
@@ -29,165 +54,42 @@
 // When a shutdown signal is received from the application it propagates from
 // the processor to the active worker pools, stopping any in-progress jobs and
 // gracefully shutting down the corresponding workers.
-package main
-
-import (
-	"context"
-	"crypto/tls"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-)
-
-const (
-	workerMaxInactivity = 5 * time.Second
-	backoffDuration     = 1 * time.Second
-)
-
-var client *http.Client
-
-func init() {
-	client = &http.Client{
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
-		Timeout:   time.Duration(3) * time.Second}
-}
-
-// Processor is in charge of scanning Redis for new aggregations and initiating
-// the corresponding WorkerPools when needed. It also manages and instruments
-// the WorkerPools.
 type Processor struct {
-	// storageDir is the filesystem location where the actual downloads
-	// will be saved.
-	storageDir string
-
-	// scanInterval is the amount of seconds to wait before re-scanning
+	// ScanInterval is the amount of seconds to wait before re-scanning
 	// Redis for new Aggregations.
-	scanInterval int
+	ScanInterval int
 
-	// pools contain the existing WorkerPools
-	pools map[string]*WorkerPool
+	// StorageDir is the filesystem location where the actual downloads
+	// will be saved.
+	StorageDir string
+
+	// The client that will be used for the download requests
+	Client *http.Client
 
 	Log *log.Logger
+
+	// pools contain the existing worker pools
+	pools map[string]*workerPool
 }
 
-// WorkerPool corresponds to an Aggregation. It spawns and instruments the
+// workerPool corresponds to an Aggregation. It spawns and instruments the
 // workers that perform the actual downloads and enforces the rate-limit rules
 // of the corresponding Aggregation.
-type WorkerPool struct {
-	Aggr          Aggregation
-	activeWorkers int32
-	log           *log.Logger
+type workerPool struct {
+	aggr             Aggregation
+	p                *Processor
+	numActiveWorkers int32
+	log              *log.Logger
 
 	// jobChan is the channel that distributes jobs to the respective
 	// workers
 	jobChan chan Job
 }
 
-// NewWorkerPool initializes and returns a WorkerPool for aggr.
-func NewWorkerPool(aggr Aggregation) WorkerPool {
-	logPrefix := fmt.Sprintf("[Processor][WorkerPool:%s] ", aggr.ID)
-
-	return WorkerPool{
-		Aggr:    aggr,
-		jobChan: make(chan Job),
-		log:     log.New(os.Stderr, logPrefix, log.Ldate|log.Ltime)}
-}
-
-// increaseWorkers atomically increases the activeWorkers counter of wp by 1
-func (wp *WorkerPool) increaseWorkers() {
-	atomic.AddInt32(&wp.activeWorkers, 1)
-}
-
-// decreaseWorkers atomically decreases the activeWorkers counter of wp by 1
-func (wp *WorkerPool) decreaseWorkers() {
-	atomic.AddInt32(&wp.activeWorkers, -1)
-}
-
-// ActiveWorkers return the number of existing active workers in wp.
-func (wp *WorkerPool) ActiveWorkers() int {
-	return int(atomic.LoadInt32(&wp.activeWorkers))
-}
-
-// Start starts wp. It is the core WorkerPool work loop. It can be stopped by
-// using ctx.
-//
-// All worker instrumentation, job popping from Redis and shutdown logic is
-// performed in Start.
-func (wp *WorkerPool) Start(ctx context.Context, storageDir string) {
-	wp.log.Printf("Started working...")
-
-	var wg sync.WaitGroup
-
-WORKERPOOL_LOOP:
-	for {
-		select {
-		case <-ctx.Done():
-			wp.log.Printf("Received shutdown signal...")
-			close(wp.jobChan)
-			break WORKERPOOL_LOOP
-		default:
-			job, err := wp.Aggr.PopJob()
-			if err != nil {
-				if _, ok := err.(QueueEmptyError); ok {
-					// No job found, backing off
-					time.Sleep(backoffDuration)
-				} else {
-					wp.log.Println(err)
-				}
-
-				continue
-			}
-			if wp.ActiveWorkers() < wp.Aggr.Limit {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					defer wp.decreaseWorkers()
-					wp.increaseWorkers()
-					wp.work(ctx, storageDir)
-				}()
-			}
-			wp.jobChan <- job
-		}
-	}
-
-	wg.Wait()
-	wp.log.Printf("Closing...")
-}
-
-// work consumes Jobs from wp and performs them.
-func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
-	defer wp.log.Println("[Worker] Bye!")
-	lastActive := time.Now()
-
-	for {
-		select {
-		case job, ok := <-wp.jobChan:
-			if !ok {
-				return
-			}
-
-			job.Perform(ctx, saveDir)
-			lastActive = time.Now()
-		default:
-			if time.Now().Sub(lastActive) > workerMaxInactivity {
-				return
-			}
-
-			// No job found, backing off
-			time.Sleep(backoffDuration)
-		}
-	}
-}
-
 // NewProcessor initializes and returns a Processor, or an error if storageDir
 // is not writable.
-func NewProcessor(scaninter int, storageDir string) (Processor, error) {
+func NewProcessor(scanInterval int, storageDir string, client *http.Client,
+	logger *log.Logger) (Processor, error) {
 	// verify we can write to storageDir
 	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
 	if err != nil {
@@ -209,10 +111,11 @@ func NewProcessor(scaninter int, storageDir string) (Processor, error) {
 	}
 
 	return Processor{
-		storageDir:   storageDir,
-		scanInterval: scaninter,
-		pools:        make(map[string]*WorkerPool),
-		Log:          log.New(os.Stderr, "[Processor] ", log.Ldate|log.Ltime)}, nil
+		StorageDir:   storageDir,
+		ScanInterval: scanInterval,
+		Client:       client,
+		Log:          logger,
+		pools:        make(map[string]*workerPool)}, nil
 }
 
 // Start starts p.
@@ -223,7 +126,7 @@ func (p *Processor) Start(closeCh chan struct{}) {
 	p.Log.Println("Starting...")
 	workerClose := make(chan string)
 	var wpWg sync.WaitGroup
-	scanTicker := time.NewTicker(time.Duration(p.scanInterval) * time.Second)
+	scanTicker := time.NewTicker(time.Duration(p.ScanInterval) * time.Second)
 	defer scanTicker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -256,16 +159,16 @@ PROCESSOR_LOOP:
 							p.Log.Printf("Could not get aggregation %s: %v", aggrID, err)
 							continue
 						}
-						wp := NewWorkerPool(aggr)
+						wp := p.newWorkerPool(aggr)
 						p.pools[aggrID] = &wp
 						wpWg.Add(1)
 
 						go func() {
 							defer wpWg.Done()
-							wp.Start(ctx, p.storageDir)
+							wp.start(ctx, p.StorageDir)
 							// The processor only needs to be informed about non-forced close ( without context-cancel )
 							if ctx.Err() == nil {
-								workerClose <- wp.Aggr.ID
+								workerClose <- wp.aggr.ID
 							}
 						}()
 					}
@@ -281,4 +184,168 @@ PROCESSOR_LOOP:
 	wpWg.Wait()
 	p.Log.Println("Shutting down...")
 	closeCh <- struct{}{}
+}
+
+// newWorkerPool initializes and returns a WorkerPool for aggr.
+func (p *Processor) newWorkerPool(aggr Aggregation) workerPool {
+	logPrefix := fmt.Sprintf("[Processor][WorkerPool:%s] ", aggr.ID)
+
+	return workerPool{
+		aggr:    aggr,
+		jobChan: make(chan Job),
+		p:       p,
+		log:     log.New(os.Stderr, logPrefix, log.Ldate|log.Ltime)}
+}
+
+// increaseWorkers atomically increases the activeWorkers counter of wp by 1
+func (wp *workerPool) increaseWorkers() {
+	atomic.AddInt32(&wp.numActiveWorkers, 1)
+}
+
+// decreaseWorkers atomically decreases the activeWorkers counter of wp by 1
+func (wp *workerPool) decreaseWorkers() {
+	atomic.AddInt32(&wp.numActiveWorkers, -1)
+}
+
+// activeWorkers return the number of existing active workers in wp.
+func (wp *workerPool) activeWorkers() int {
+	return int(atomic.LoadInt32(&wp.numActiveWorkers))
+}
+
+// start starts wp. It is the core WorkerPool work loop. It can be stopped by
+// using ctx.
+//
+// All worker instrumentation, job popping from Redis and shutdown logic is
+// performed in start.
+func (wp *workerPool) start(ctx context.Context, storageDir string) {
+	wp.log.Printf("Started working...")
+
+	var wg sync.WaitGroup
+
+WORKERPOOL_LOOP:
+	for {
+		select {
+		case <-ctx.Done():
+			wp.log.Printf("Received shutdown signal...")
+			close(wp.jobChan)
+			break WORKERPOOL_LOOP
+		default:
+			job, err := wp.aggr.PopJob()
+			if err != nil {
+				if _, ok := err.(QueueEmptyError); ok {
+					// No job found, backing off
+					time.Sleep(backoffDuration)
+				} else {
+					wp.log.Println(err)
+				}
+
+				continue
+			}
+			if wp.activeWorkers() < wp.aggr.Limit {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					defer wp.decreaseWorkers()
+					wp.increaseWorkers()
+					wp.work(ctx, storageDir)
+				}()
+			}
+			wp.jobChan <- job
+		}
+	}
+
+	wg.Wait()
+	wp.log.Printf("Closing...")
+}
+
+// work consumes Jobs from wp and performs them.
+func (wp *workerPool) work(ctx context.Context, saveDir string) {
+	defer wp.log.Println("[Worker] Bye!")
+	lastActive := time.Now()
+
+	for {
+		select {
+		case job, ok := <-wp.jobChan:
+			if !ok {
+				return
+			}
+
+			wp.perform(ctx, &job)
+			lastActive = time.Now()
+		default:
+			if time.Now().Sub(lastActive) > workerMaxInactivity {
+				return
+			}
+
+			// No job found, backing off
+			time.Sleep(backoffDuration)
+		}
+	}
+}
+
+// perform downloads the resource denoted by j.URL and updates its state in
+// Redis accordingly. It may retry downloading on certain errors.
+func (wp *workerPool) perform(ctx context.Context, j *Job) {
+	j.SetState(StateInProgress)
+	out, err := os.Create(wp.p.StorageDir + j.ID)
+	if err != nil {
+		requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
+		return
+	}
+	defer out.Close()
+
+	req, err := http.NewRequest("GET", j.URL, nil)
+	if err != nil {
+		requeueOrFail(j, fmt.Sprintf("Could not create request, %v", err))
+		return
+	}
+
+	resp, err := wp.p.Client.Do(req.WithContext(ctx))
+	if err != nil {
+		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
+			err = j.SetState(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
+			if err != nil {
+				wp.log.Println(err)
+			}
+			return
+		}
+
+		requeueOrFail(j, err.Error())
+		return
+	}
+
+	if resp.StatusCode >= http.StatusInternalServerError {
+		requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
+		return
+	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
+		j.SetState(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
+		return
+	}
+	defer resp.Body.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		requeueOrFail(j, fmt.Sprintf("Could not download file, %v", err))
+		return
+	}
+
+	if err = j.SetState(StateSuccess); err != nil {
+		wp.log.Println(err)
+		return
+	}
+
+	if err = j.QueuePendingCallback(); err != nil {
+		wp.log.Println(err)
+	}
+}
+
+// requeueOrFail checks the retry count of the current download
+// and retries the job if its RetryCount < maxRetries else it marks
+// it as failed
+func requeueOrFail(j *Job, err string) error {
+	if j.RetryCount >= MaxDownloadRetries {
+		return j.SetState(StateFailed, err)
+	}
+	j.RetryCount++
+	return j.QueuePendingDownload()
 }
