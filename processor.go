@@ -163,16 +163,20 @@ WORKERPOOL_LOOP:
 
 // work consumes Jobs from wp and performs them.
 func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
+	defer wp.log.Println("[Worker] Bye!")
 	lastActive := time.Now()
 
 	for {
 		select {
-		case job := <-wp.jobChan:
+		case job, ok := <-wp.jobChan:
+			if !ok {
+				return
+			}
+
 			job.Perform(ctx, saveDir)
 			lastActive = time.Now()
 		default:
 			if time.Now().Sub(lastActive) > workerMaxInactivity {
-				wp.log.Println("[Worker] Bye!")
 				return
 			}
 
