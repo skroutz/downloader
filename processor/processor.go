@@ -149,13 +149,13 @@ PROCESSOR_LOOP:
 			for {
 				var keys []string
 				var err error
-				if keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.AggrKeyPrefix+"*", 50).Result(); err != nil {
+				if keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.JobsKeyPrefix+"*", 50).Result(); err != nil {
 					p.Log.Println(fmt.Errorf("Could not scan keys: %v", err))
 					break
 				}
 
 				for _, ag := range keys {
-					aggrID := strings.TrimPrefix(ag, storage.AggrKeyPrefix)
+					aggrID := strings.TrimPrefix(ag, storage.JobsKeyPrefix)
 					if _, ok := p.pools[aggrID]; !ok {
 						aggr, err := p.Storage.GetAggregation(aggrID)
 						if err != nil {
