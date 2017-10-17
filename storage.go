@@ -211,9 +211,12 @@ func PopCallback() (Job, error) {
 	return GetJob(cmd.Val())
 }
 
-// GetAggregation fetches an aggregation from the Redis and returns it
+// GetAggregation fetches from Redis the aggregation denoted by id. If the
+// aggregation was not found, an error is returned.
 func GetAggregation(id string) (Aggregation, error) {
-	aggr := Aggregation{ID: id, Limit: 0}
+	// TODO(agis): this shouldn't be needed. We can get rid of it if we
+	// move the `RedisKey` method out of `Aggregation`
+	aggr := Aggregation{ID: id}
 
 	cmd := Redis.HGet(aggr.RedisKey(), "Limit")
 	err := cmd.Err()
@@ -221,11 +224,11 @@ func GetAggregation(id string) (Aggregation, error) {
 		return Aggregation{}, err
 	}
 
-	maxConns, err := strconv.Atoi(cmd.Val())
+	limit, err := strconv.Atoi(cmd.Val())
 	if err != nil {
 		return Aggregation{}, err
 	}
-	aggr.Limit = maxConns
+	aggr.Limit = limit
 
 	return aggr, nil
 }

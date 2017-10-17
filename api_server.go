@@ -40,7 +40,12 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	aggr := Aggregation{ID: j.AggrID}
+	// TODO: limit should be given from the request instead
+	aggr, err := NewAggregation(j.AggrID, 8)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
 	exists, err = aggr.Exists()
 	if err != nil {
 		http.Error(w, "Error queuing download: "+err.Error(),
