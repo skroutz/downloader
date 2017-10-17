@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -37,15 +38,15 @@ const (
 	// "aggr:<aggregation-id>" and containing various information about
 	// the aggregation itself (eg. its limit).
 	aggrKeyPrefix = "aggr:"
-  
+
 	// Individual job IDs of an aggregation exist in a Redis List named
 	// in the form "jobs:<aggregation-id>".
 	jobKeyPrefix = "jobs:"
-  
+
 	callbackQueue = "CallbackQueue"
 
 	maxDownloadRetries = 3
-	maxCBRetries = 2
+	maxCBRetries       = 2
 )
 
 // Job represents a user request for downloading a resource.
@@ -383,9 +384,29 @@ func jobFromMap(m map[string]string) (Job, error) {
 	return j, nil
 }
 
-// GetAggregation fetches an aggregation from the Redis and returns it
+func NewAggregation(id string, limit int) (Aggregation, error) {
+	a := Aggregation{}
+
+	if id == "" {
+		return a, errors.New("Aggregation ID cannot be empty")
+	}
+
+	if limit <= 0 {
+		return a, errors.New("Aggregation limit must be greater than 0")
+	}
+
+	a.ID = id
+	a.Limit = limit
+
+	return a, nil
+}
+
+// GetAggregation fetches from Redis the aggregation denoted by id. If the
+// aggregation was not found, an error is returned.
 func GetAggregation(id string) (Aggregation, error) {
-	aggr := Aggregation{ID: id, Limit: 0}
+	// TODO(agis): this shouldn't be needed. We can get rid of it if we
+	// move the `RedisKey` method out of `Aggregation`
+	aggr := Aggregation{ID: id}
 
 	cmd := Redis.HGet(aggr.RedisKey(), "Limit")
 	err := cmd.Err()
@@ -393,11 +414,11 @@ func GetAggregation(id string) (Aggregation, error) {
 		return Aggregation{}, err
 	}
 
-	maxConns, err := strconv.Atoi(cmd.Val())
+	limit, err := strconv.Atoi(cmd.Val())
 	if err != nil {
 		return Aggregation{}, err
 	}
-	aggr.Limit = maxConns
+	aggr.Limit = limit
 
 	return aggr, nil
 }
