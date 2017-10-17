@@ -139,7 +139,7 @@ WORKERPOOL_LOOP:
 					// No job found, backing off
 					time.Sleep(backoffDuration)
 				} else {
-					log.Println(err)
+					wp.log.Println(err)
 				}
 
 				continue
@@ -172,7 +172,7 @@ func (wp *WorkerPool) work(ctx context.Context, saveDir string) {
 			lastActive = time.Now()
 		default:
 			if time.Now().Sub(lastActive) > workerMaxInactivity {
-				log.Printf("[WorkerPool %s][Worker] Bye!", wp.Aggr.ID)
+				wp.log.Println("[Worker] Bye!")
 				return
 			}
 
