@@ -52,6 +52,42 @@ func InitStorage(host string, port int) error {
 	return nil
 }
 
+type Storage struct {
+	Client *redis.Client
+
+	// Each aggregation has a corresponding Redis Hash named in the form
+	// "<aggrKeyPrefix><aggregation-id>" and containing various information
+	// about the aggregation itself (eg. its limit).
+	AggrKeyPrefix string
+
+	// Individual job IDs of an aggregation exist in a Redis List named
+	// in the form "jobs:<aggregation-id>".
+	JobKeyPrefix string
+
+	// IDs of jobs that are completed and their callback is to be executed
+	// are in this Redis List.
+	//
+	// TODO: this introduces coupling with the notifier. See how we can
+	// separate it
+	CallbackQueue string
+}
+
+// NewStorage returns a new Storage that can communicate with Redis. If Redis
+// is not up an error will be returned.
+//
+// Callers should set right after set AggrKeyPrefix, JobKeyPrefix and
+// CallbackQueue fields on the returned storage.
+func NewStorage(c *redis.Client) (*Storage, error) {
+	if ping := c.Ping(); ping.Err() != nil || ping.Val() != "PONG" {
+		if ping.Err() != nil {
+			return fmt.Errorf("Could not ping Redis Server successfully: %v", ping.Err())
+		}
+		return fmt.Errorf("Could not ping Redis Server successfully: Expected PONG, received %s", ping.Val())
+	}
+
+	return &Storage{Client: c}
+}
+
 // Save updates or creates j in Redis.
 func (j *Job) Save() error {
 	m, err := j.toMap()
