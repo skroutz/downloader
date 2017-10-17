@@ -33,7 +33,6 @@ const (
 	callbackQueue = "CallbackQueue"
 
 	maxDownloadRetries = 3
-	maxCBRetries       = 2
 )
 
 // CallbackInfo holds the info to be posted back to the provided callback url of the caller
@@ -273,17 +272,6 @@ func PopCallback() (Job, error) {
 	}
 
 	return GetJob(cmd.Val())
-}
-
-// RetryOrFail checks the retry count of the current download
-// and retries the job if its RetryCount < maxRetries else it marks
-// it as failed
-func (j *Job) RetryOrFail(err string) error {
-	if j.RetryCount >= maxDownloadRetries {
-		return j.SetState(StateFailed, err)
-	}
-	j.RetryCount++
-	return j.QueuePendingDownload()
 }
 
 // GetAggregation fetches an aggregation from the Redis and returns it

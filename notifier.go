@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// TODO: rename to MaxRetries when notifier is extracted into its own package
+const MaxCBRetries = 2
+
 // Notifier is the the component responsible for consuming the result of jobs
 // and notifying back the respective users by issuing HTTP requests to their
 // provided callback URLs.
@@ -97,4 +100,17 @@ func (n *Notifier) Notify(j *Job) {
 	}
 
 	j.SetCallbackState(StateSuccess)
+}
+
+// retryOrFail checks the callback count of the current download
+// and retries the callback if its Retry Counts < maxRetries else it marks
+// it as failed
+//
+// TODO: isn't used anywhere. Why?
+func (n *Notifier) retryOrFail(j *Job, err string) error {
+	if j.CallbackCount >= MaxCBRetries {
+		return j.SetCallbackState(StateFailed, err)
+	}
+	j.CallbackCount++
+	return j.QueuePendingCallback()
 }
