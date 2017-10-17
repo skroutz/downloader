@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"log"
+	"net/http"
 	"os"
 	"sync"
 	"testing"
@@ -26,7 +29,12 @@ func TestProcessorFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := NewProcessor(1, savedir)
+	logger := log.New(os.Stderr, "[Processor] ", log.Ldate|log.Ltime)
+	client := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+		Timeout:   time.Duration(3) * time.Second}
+
+	processor, err := NewProcessor(1, savedir, client, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,12 +57,17 @@ func TestProcessorFlow(t *testing.T) {
 }
 
 func TestWorkerPoolWork(t *testing.T) {
+	processor, err := NewProcessor(1, savedir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	job := GetTestJob()
 	job.URL = "https://httpbin.org/image/png"
 	job.Save()
 	defer os.Remove(savedir + job.ID)
 
-	wp := NewWorkerPool(Aggregation{ID: job.AggrID, Limit: 1})
+	wp := processor.newWorkerPool(Aggregation{ID: job.AggrID, Limit: 1})
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

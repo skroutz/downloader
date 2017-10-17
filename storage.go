@@ -1,25 +1,13 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/go-redis/redis"
 )
-
-// State represents the download & callback states.
-// For valid values see constants below.
-type State string
 
 type QueueEmptyError string
 
@@ -28,12 +16,6 @@ func (err QueueEmptyError) Error() string {
 }
 
 const (
-	// The available states of a job's DownloadState/CallbackState.
-	StatePending    = "Pending"
-	StateFailed     = "Failed"
-	StateSuccess    = "Success"
-	StateInProgress = "InProgress"
-
 	// Each aggregation has a corresponding Redis Hash named in the form
 	// "aggr:<aggregation-id>" and containing various information about
 	// the aggregation itself (eg. its limit).
@@ -44,42 +26,7 @@ const (
 	jobKeyPrefix = "jobs:"
 
 	callbackQueue = "CallbackQueue"
-
-	maxDownloadRetries = 3
-	maxCBRetries       = 2
 )
-
-// Job represents a user request for downloading a resource.
-//
-// It is the core entity of the downloader and holds all info and state of
-// the download.
-type Job struct {
-	// Auto-generated
-	ID string `json:"id"`
-
-	// The URL pointing to the resource to be downloaded
-	URL string `json:"url"`
-
-	// AggrID is the ID of the aggregation the job belongs to.
-	AggrID string `json:"aggr_id"`
-
-	DownloadState State `json:"-"`
-
-	// RetryCount is how many times the download was attempted.
-	RetryCount int `json:"-"`
-
-	// Auxiliary ad-hoc information. Typically used for communicating
-	// errors back to the user.
-	Meta string `json:"-"`
-
-	CallbackURL   string `json:"callback_url"`
-	CallbackCount int    `json:"-"`
-	CallbackState State  `json:"-"`
-
-	// Contains arbitrary info provided by the user that are posted
-	// back during the callback
-	Extra string `json:"extra"`
-}
 
 // CallbackInfo holds the info to be posted back to the provided callback url of the caller
 type CallbackInfo struct {
@@ -87,20 +34,6 @@ type CallbackInfo struct {
 	Error       string `json:"error"`
 	Extra       string `json:"extra"`
 	DownloadURL string `json:"download_url"`
-}
-
-// Aggregation is the concept through which the rate limit rules are defined
-// and enforced.
-type Aggregation struct {
-	ID string
-
-	// Maximum numbers of concurrent download requests
-	Limit int
-}
-
-// MarshalBinary is used by redis driver to marshall custom type State
-func (s State) MarshalBinary() (data []byte, err error) {
-	return []byte(string(s)), nil
 }
 
 // Redis must be initialized before use
@@ -130,66 +63,71 @@ func (j *Job) Save() error {
 	return err
 }
 
+func (j *Job) toMap() (map[string]interface{}, error) {
+	out := make(map[string]interface{})
+
+	v := reflect.ValueOf(j)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	// we only accept structs
+	if v.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("ToMap only accepts structs; got %T", v)
+	}
+
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		// gets us a StructField
+		fi := typ.Field(i)
+		// set key of map to value in struct field
+		out[fi.Name] = v.Field(i).Interface()
+	}
+	return out, nil
+}
+
+func jobFromMap(m map[string]string) (Job, error) {
+	var err error
+	j := Job{}
+	for k, v := range m {
+		switch k {
+		case "ID":
+			j.ID = v
+		case "URL":
+			j.URL = v
+		case "AggrID":
+			j.AggrID = v
+		case "DownloadState":
+			j.DownloadState = State(v)
+		case "RetryCount":
+			j.RetryCount, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "Meta":
+			j.Meta = v
+		case "CallbackURL":
+			j.CallbackURL = v
+		case "CallbackCount":
+			j.CallbackCount, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "CallbackState":
+			j.CallbackState = State(v)
+		case "Extra":
+			j.Extra = v
+		default:
+			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
+		}
+	}
+	return j, nil
+}
+
 // GetJob fetches the Job with the given id from Redis.
 func GetJob(id string) (Job, error) {
 	cmd := Redis.HGetAll(id)
 	return jobFromMap(cmd.Val())
-}
-
-// Perform downloads the resource denoted by j.URL and updates its state in
-// Redis accordingly. It may retry downloading on certain errors.
-func (j *Job) Perform(ctx context.Context, saveDir string) {
-	j.SetState(StateInProgress)
-	out, err := os.Create(saveDir + j.ID)
-	if err != nil {
-		j.RetryOrFail(fmt.Sprintf("Could not write to file, %v", err))
-		return
-	}
-	defer out.Close()
-
-	req, err := http.NewRequest("GET", j.URL, nil)
-	if err != nil {
-		j.RetryOrFail(fmt.Sprintf("Could not create request, %v", err))
-		return
-	}
-
-	resp, err := client.Do(req.WithContext(ctx))
-	if err != nil {
-		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = j.SetState(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
-			if err != nil {
-				log.Println(err)
-			}
-			return
-		}
-
-		j.RetryOrFail(err.Error())
-		return
-	}
-
-	if resp.StatusCode >= http.StatusInternalServerError {
-		j.RetryOrFail(fmt.Sprintf("Received status code %s", resp.Status))
-		return
-	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-		j.SetState(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
-		return
-	}
-	defer resp.Body.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		j.RetryOrFail(fmt.Sprintf("Could not download file, %v", err))
-		return
-	}
-
-	if err = j.SetState(StateSuccess); err != nil {
-		log.Println(err)
-		return
-	}
-
-	if err = j.QueuePendingCallback(); err != nil {
-		log.Println(err)
-	}
 }
 
 // Exists checks if a job exists in Redis
@@ -259,34 +197,6 @@ func (j *Job) downloadURL() string {
 	return fmt.Sprintf("http://localhost/%s", j.ID)
 }
 
-// PerformCallback posts callback info to the Job's CallbackURL
-// using the provided http.Client
-func (j *Job) PerformCallback(client *http.Client) {
-	j.SetCallbackState(StateInProgress)
-	cbInfo, err := j.callbackInfo()
-	if err != nil {
-		j.SetState(StateFailed, err.Error())
-		return
-	}
-
-	cb, err := json.Marshal(cbInfo)
-	if err != nil {
-		j.SetState(StateFailed, err.Error())
-		return
-	}
-
-	res, err := client.Post(j.CallbackURL, "application/json", bytes.NewBuffer(cb))
-	if err != nil || res.StatusCode < 200 || res.StatusCode >= 300 {
-		if err == nil {
-			err = fmt.Errorf("Received Status: %s", res.Status)
-		}
-		j.SetCallbackState(StateFailed, err.Error())
-		return
-	}
-
-	j.SetCallbackState(StateSuccess)
-}
-
 // PopCallback attempts to pop a Job from the callback queue.
 // If it succeeds the job with the popped ID is returned.
 func PopCallback() (Job, error) {
@@ -299,106 +209,6 @@ func PopCallback() (Job, error) {
 	}
 
 	return GetJob(cmd.Val())
-}
-
-// RetryOrFail checks the retry count of the current download
-// and retries the job if its RetryCount < maxRetries else it marks
-// it as failed
-func (j *Job) RetryOrFail(err string) error {
-	if j.RetryCount >= maxDownloadRetries {
-		return j.SetState(StateFailed, err)
-	}
-	j.RetryCount++
-	return j.QueuePendingDownload()
-}
-
-// CBRetryOrFail checks the callback count of the current download
-// and retries the callback if its Retry Counts < maxRetries else it marks
-// it as failed
-func (j *Job) CBRetryOrFail(err string) error {
-	if j.CallbackCount >= maxCBRetries {
-		return j.SetCallbackState(StateFailed, err)
-	}
-	j.CallbackCount++
-	return j.QueuePendingCallback()
-}
-
-func (j *Job) toMap() (map[string]interface{}, error) {
-	out := make(map[string]interface{})
-
-	v := reflect.ValueOf(j)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	// we only accept structs
-	if v.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("ToMap only accepts structs; got %T", v)
-	}
-
-	typ := v.Type()
-	for i := 0; i < v.NumField(); i++ {
-		// gets us a StructField
-		fi := typ.Field(i)
-		// set key of map to value in struct field
-		out[fi.Name] = v.Field(i).Interface()
-	}
-	return out, nil
-}
-
-func jobFromMap(m map[string]string) (Job, error) {
-	var err error
-	j := Job{}
-	for k, v := range m {
-		switch k {
-		case "ID":
-			j.ID = v
-		case "URL":
-			j.URL = v
-		case "AggrID":
-			j.AggrID = v
-		case "DownloadState":
-			j.DownloadState = State(v)
-		case "RetryCount":
-			j.RetryCount, err = strconv.Atoi(v)
-			if err != nil {
-				return j, fmt.Errorf("Could not decode struct from map: %v", err)
-			}
-		case "Meta":
-			j.Meta = v
-		case "CallbackURL":
-			j.CallbackURL = v
-		case "CallbackCount":
-			j.CallbackCount, err = strconv.Atoi(v)
-			if err != nil {
-				return j, fmt.Errorf("Could not decode struct from map: %v", err)
-			}
-		case "CallbackState":
-			j.CallbackState = State(v)
-		case "Extra":
-			j.Extra = v
-		default:
-			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
-		}
-	}
-	return j, nil
-}
-
-func NewAggregation(id string, limit int) (Aggregation, error) {
-	a := Aggregation{}
-
-	if id == "" {
-		return a, errors.New("Aggregation ID cannot be empty")
-	}
-
-	if limit <= 0 {
-		return a, errors.New("Aggregation limit must be greater than 0")
-	}
-
-	a.ID = id
-	a.Limit = limit
-
-	return a, nil
 }
 
 // GetAggregation fetches from Redis the aggregation denoted by id. If the
