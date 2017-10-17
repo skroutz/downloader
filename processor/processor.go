@@ -138,7 +138,7 @@ PROCESSOR_LOOP:
 		select {
 		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
-			p.Log.Println("Deleting worker for " + aggrID)
+			p.Log.Println("Deleting worker pool for " + aggrID)
 			delete(p.pools, aggrID)
 		// Close signal from upper layer
 		case <-closeCh:
@@ -230,14 +230,21 @@ WORKERPOOL_LOOP:
 		select {
 		case <-ctx.Done():
 			wp.log.Printf("Received shutdown signal...")
-			close(wp.jobChan)
 			break WORKERPOOL_LOOP
 		default:
 			job, err := wp.p.Storage.PopJob(&wp.aggr)
 			if err != nil {
 				if _, ok := err.(storage.QueueEmptyError); ok {
-					// No job found, backing off
-					time.Sleep(backoffDuration)
+					// Stop the WorkerPool if
+					// 1) The queue is empty
+					// 2) No workers are running
+					if wp.activeWorkers() == 0 {
+						wp.log.Println("Closing due to inactivity...")
+						break WORKERPOOL_LOOP
+					} else {
+						// backoff & wait for workers to finish or a job to be queued
+						time.Sleep(backoffDuration)
+					}
 				} else {
 					wp.log.Println(err)
 				}
@@ -257,6 +264,7 @@ WORKERPOOL_LOOP:
 		}
 	}
 
+	close(wp.jobChan)
 	wg.Wait()
 	wp.log.Printf("Closing...")
 }
