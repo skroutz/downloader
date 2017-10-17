@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/urfave/cli"
 )
 
@@ -49,23 +52,29 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-				l := log.New(os.Stderr, "[API] ", log.Ldate|log.Ltime)
-				s := NewAPIServer(c.String("host"), c.Int("port"))
+
+				storage, err := NewStorage(redisClient(cfg.Redis.Host, cfg.Redis.Port))
+				if err != nil {
+					return err
+				}
+				as := NewAPIServer(storage, c.String("host"), c.Int("port"))
+
+				logger := log.New(os.Stderr, "[API] ", log.Ldate|log.Ltime)
 				go func() {
-					l.Println(fmt.Sprintf("Listening on %s...", s.Addr))
-					err := s.ListenAndServe()
+					logger.Println(fmt.Sprintf("Listening on %s...", as.Server.Addr))
+					err := as.Server.ListenAndServe()
 					if err != nil && err != http.ErrServerClosed {
-						l.Fatal(err)
+						logger.Fatal(err)
 					}
 				}()
 
 				<-sigCh
-				l.Println("Shutting down gracefully...")
-				err := s.Shutdown(context.TODO())
+				logger.Println("Shutting down gracefully...")
+				err = as.Server.Shutdown(context.TODO())
 				if err != nil {
 					return err
 				}
-				l.Println("Bye!")
+				logger.Println("Bye!")
 				return nil
 			},
 			Before: BeforeCommand,
@@ -82,14 +91,20 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-				logger := log.New(os.Stderr, "[Processor] ", log.Ldate|log.Ltime)
+
 				client := &http.Client{
 					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
 					Timeout:   time.Duration(3) * time.Second}
-				processor, err := NewProcessor(3, cfg.Processor.StorageDir, client, logger)
+				storage, err := NewStorage(redisClient(cfg.Redis.Host, cfg.Redis.Port))
 				if err != nil {
 					return err
 				}
+				logger := log.New(os.Stderr, "[Processor] ", log.Ldate|log.Ltime)
+				processor, err := NewProcessor(storage, 3, cfg.Processor.StorageDir, client, logger)
+				if err != nil {
+					return err
+				}
+
 				closeChan := make(chan struct{})
 				go processor.Start(closeChan)
 
@@ -114,17 +129,23 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-				l := log.New(os.Stderr, "[Notifier] ", log.Ldate|log.Ltime)
-				notifier := NewNotifier(cfg.Notifier.Concurrency)
+
+				logger := log.New(os.Stderr, "[Notifier] ", log.Ldate|log.Ltime)
+				storage, err := NewStorage(redisClient(cfg.Redis.Host, cfg.Redis.Port))
+				if err != nil {
+					return err
+				}
+				notifier := NewNotifier(storage, cfg.Notifier.Concurrency)
+
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan)
 
 				<-sigCh
-				l.Println("Shutting down...")
+				logger.Println("Shutting down...")
 				closeChan <- struct{}{}
-				l.Println("Waiting for the notifier to finish.")
+				logger.Println("Waiting for the notifier to finish.")
 				<-closeChan
-				l.Println("Bye!")
+				logger.Println("Bye!")
 				return nil
 			},
 			Before: BeforeCommand,
@@ -137,6 +158,8 @@ func main() {
 }
 
 // BeforeCommand extracts configuration from the provided config file and initializes redis
+// TODO: make this an ordinary helper function so we can make it return
+// a Storage and use it when we want to
 func BeforeCommand(c *cli.Context) error {
 	f, err := os.Open(c.String("config"))
 	if err != nil {
@@ -151,5 +174,12 @@ func BeforeCommand(c *cli.Context) error {
 		return err
 	}
 
-	return InitStorage(cfg.Redis.Host, cfg.Redis.Port)
+	return nil
+}
+
+func redisClient(host string, port int) *redis.Client {
+	return redis.NewClient(
+		&redis.Options{
+			Addr: strings.Join([]string{host, strconv.Itoa(port)}, ":"),
+		})
 }

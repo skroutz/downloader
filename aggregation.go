@@ -11,8 +11,8 @@ type Aggregation struct {
 	Limit int
 }
 
-func NewAggregation(id string, limit int) (Aggregation, error) {
-	a := Aggregation{}
+func NewAggregation(id string, limit int) (*Aggregation, error) {
+	a := new(Aggregation)
 
 	if id == "" {
 		return a, errors.New("Aggregation ID cannot be empty")

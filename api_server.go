@@ -6,21 +6,29 @@ import (
 	"strconv"
 )
 
-func NewAPIServer(host string, port int) *http.Server {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/download/", handleDownload)
-	return &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
+type APIServer struct {
+	Server  *http.Server
+	Storage *Storage
 }
 
-// handleDownload enqueues new downloads to the backend Redis instance
-func handleDownload(w http.ResponseWriter, r *http.Request) {
+func NewAPIServer(s *Storage, host string, port int) *APIServer {
+	as := &APIServer{Storage: s}
+	mux := http.NewServeMux()
+	mux.Handle("/download/", as)
+	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
+	return as
+}
+
+// ServeHTTP enqueues new downloads to the backend Redis instance
+// TODO: Why the receiver cannot be a pointer???
+func (as *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 	decoder := json.NewDecoder(r.Body)
-	j := Job{}
-	err := decoder.Decode(&j)
+	j := new(Job)
+	err := decoder.Decode(j)
 	if err != nil {
 		http.Error(w, "Error converting results to json",
 			http.StatusBadRequest)
@@ -28,7 +36,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	exists, err := j.Exists()
+	exists, err := as.Storage.JobExists(j)
 	if err != nil {
 		http.Error(w, "Error queuing download: "+err.Error(),
 			http.StatusInternalServerError)
@@ -46,14 +54,14 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
-	exists, err = aggr.Exists()
+	exists, err = as.Storage.AggregationExists(aggr)
 	if err != nil {
 		http.Error(w, "Error queuing download: "+err.Error(),
 			http.StatusInternalServerError)
 		return
 	}
 	if !exists {
-		err = aggr.Save()
+		err = as.Storage.SaveAggregation(aggr)
 		if err != nil {
 			http.Error(w, "Error queuing download: "+err.Error(),
 				http.StatusInternalServerError)
@@ -61,7 +69,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err = j.QueuePendingDownload(); err != nil {
+	if err = as.Storage.QueuePendingDownload(j); err != nil {
 		http.Error(w, "Error queuing download: "+err.Error(),
 			http.StatusInternalServerError)
 		return
