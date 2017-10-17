@@ -14,10 +14,6 @@ import (
 	"github.com/go-redis/redis"
 )
 
-// State represents the download & callback states.
-// For valid values see constants below.
-type State string
-
 type QueueEmptyError string
 
 func (err QueueEmptyError) Error() string {
@@ -25,12 +21,6 @@ func (err QueueEmptyError) Error() string {
 }
 
 const (
-	// The available states of a job's DownloadState/CallbackState.
-	StatePending    = "Pending"
-	StateFailed     = "Failed"
-	StateSuccess    = "Success"
-	StateInProgress = "InProgress"
-
 	// Each aggregation has a corresponding Redis Hash named in the form
 	// "aggr:<aggregation-id>" and containing various information about
 	// the aggregation itself (eg. its limit).
@@ -46,58 +36,12 @@ const (
 	maxCBRetries       = 2
 )
 
-// Job represents a user request for downloading a resource.
-//
-// It is the core entity of the downloader and holds all info and state of
-// the download.
-type Job struct {
-	// Auto-generated
-	ID string `json:"id"`
-
-	// The URL pointing to the resource to be downloaded
-	URL string `json:"url"`
-
-	// AggrID is the ID of the aggregation the job belongs to.
-	AggrID string `json:"aggr_id"`
-
-	DownloadState State `json:"-"`
-
-	// RetryCount is how many times the download was attempted.
-	RetryCount int `json:"-"`
-
-	// Auxiliary ad-hoc information. Typically used for communicating
-	// errors back to the user.
-	Meta string `json:"-"`
-
-	CallbackURL   string `json:"callback_url"`
-	CallbackCount int    `json:"-"`
-	CallbackState State  `json:"-"`
-
-	// Contains arbitrary info provided by the user that are posted
-	// back during the callback
-	Extra string `json:"extra"`
-}
-
 // CallbackInfo holds the info to be posted back to the provided callback url of the caller
 type CallbackInfo struct {
 	Success     bool   `json:"success"`
 	Error       string `json:"error"`
 	Extra       string `json:"extra"`
 	DownloadURL string `json:"download_url"`
-}
-
-// Aggregation is the concept through which the rate limit rules are defined
-// and enforced.
-type Aggregation struct {
-	ID string
-
-	// Maximum numbers of concurrent download requests
-	Limit int
-}
-
-// MarshalBinary is used by redis driver to marshall custom type State
-func (s State) MarshalBinary() (data []byte, err error) {
-	return []byte(string(s)), nil
 }
 
 // Redis must be initialized before use
@@ -125,6 +69,67 @@ func (j *Job) Save() error {
 	scmd := Redis.HMSet(j.ID, m)
 	_, err = scmd.Result()
 	return err
+}
+
+func (j *Job) toMap() (map[string]interface{}, error) {
+	out := make(map[string]interface{})
+
+	v := reflect.ValueOf(j)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	// we only accept structs
+	if v.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("ToMap only accepts structs; got %T", v)
+	}
+
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		// gets us a StructField
+		fi := typ.Field(i)
+		// set key of map to value in struct field
+		out[fi.Name] = v.Field(i).Interface()
+	}
+	return out, nil
+}
+
+func jobFromMap(m map[string]string) (Job, error) {
+	var err error
+	j := Job{}
+	for k, v := range m {
+		switch k {
+		case "ID":
+			j.ID = v
+		case "URL":
+			j.URL = v
+		case "AggrID":
+			j.AggrID = v
+		case "DownloadState":
+			j.DownloadState = State(v)
+		case "RetryCount":
+			j.RetryCount, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "Meta":
+			j.Meta = v
+		case "CallbackURL":
+			j.CallbackURL = v
+		case "CallbackCount":
+			j.CallbackCount, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "CallbackState":
+			j.CallbackState = State(v)
+		case "Extra":
+			j.Extra = v
+		default:
+			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
+		}
+	}
+	return j, nil
 }
 
 // GetJob fetches the Job with the given id from Redis.
@@ -279,78 +284,6 @@ func (j *Job) RetryOrFail(err string) error {
 	}
 	j.RetryCount++
 	return j.QueuePendingDownload()
-}
-
-// CBRetryOrFail checks the callback count of the current download
-// and retries the callback if its Retry Counts < maxRetries else it marks
-// it as failed
-func (j *Job) CBRetryOrFail(err string) error {
-	if j.CallbackCount >= maxCBRetries {
-		return j.SetCallbackState(StateFailed, err)
-	}
-	j.CallbackCount++
-	return j.QueuePendingCallback()
-}
-
-func (j *Job) toMap() (map[string]interface{}, error) {
-	out := make(map[string]interface{})
-
-	v := reflect.ValueOf(j)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	// we only accept structs
-	if v.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("ToMap only accepts structs; got %T", v)
-	}
-
-	typ := v.Type()
-	for i := 0; i < v.NumField(); i++ {
-		// gets us a StructField
-		fi := typ.Field(i)
-		// set key of map to value in struct field
-		out[fi.Name] = v.Field(i).Interface()
-	}
-	return out, nil
-}
-
-func jobFromMap(m map[string]string) (Job, error) {
-	var err error
-	j := Job{}
-	for k, v := range m {
-		switch k {
-		case "ID":
-			j.ID = v
-		case "URL":
-			j.URL = v
-		case "AggrID":
-			j.AggrID = v
-		case "DownloadState":
-			j.DownloadState = State(v)
-		case "RetryCount":
-			j.RetryCount, err = strconv.Atoi(v)
-			if err != nil {
-				return j, fmt.Errorf("Could not decode struct from map: %v", err)
-			}
-		case "Meta":
-			j.Meta = v
-		case "CallbackURL":
-			j.CallbackURL = v
-		case "CallbackCount":
-			j.CallbackCount, err = strconv.Atoi(v)
-			if err != nil {
-				return j, fmt.Errorf("Could not decode struct from map: %v", err)
-			}
-		case "CallbackState":
-			j.CallbackState = State(v)
-		case "Extra":
-			j.Extra = v
-		default:
-			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
-		}
-	}
-	return j, nil
 }
 
 // GetAggregation fetches an aggregation from the Redis and returns it
