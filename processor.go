@@ -82,7 +82,6 @@ type Processor struct {
 type WorkerPool struct {
 	Aggr          Aggregation
 	activeWorkers int32
-	shutdown      chan struct{}
 	log           *log.Logger
 
 	// jobChan is the channel that distributes jobs to the respective
