@@ -169,12 +169,7 @@ func BeforeCommand(c *cli.Context) error {
 
 	dec := json.NewDecoder(f)
 	dec.UseNumber()
-	err = dec.Decode(&cfg)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return dec.Decode(&cfg)
 }
 
 func redisClient(host string, port int) *redis.Client {

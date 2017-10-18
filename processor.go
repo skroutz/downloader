@@ -276,7 +276,7 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 			wp.perform(ctx, &job)
 			lastActive = time.Now()
 		default:
-			if time.Now().Sub(lastActive) > workerMaxInactivity {
+			if time.Since(lastActive) > workerMaxInactivity {
 				return
 			}
 
