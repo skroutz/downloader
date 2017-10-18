@@ -18,14 +18,20 @@ const MaxCBRetries = 2
 // and notifying back the respective users by issuing HTTP requests to their
 // provided callback URLs.
 type Notifier struct {
+	Storage *Storage
+
+	// TODO: These should be exported
 	concurrency int
 	client      *http.Client
 	cbChan      chan Job
 }
 
 // NewNotifier takes the concurrency of the notifier as an argument
-func NewNotifier(concurrency int) Notifier {
+//
+// TODO: check concurrency is > 0
+func NewNotifier(s *Storage, concurrency int) Notifier {
 	return Notifier{
+		Storage:     s,
 		concurrency: concurrency,
 		client: &http.Client{
 			Transport: &http.Transport{
@@ -60,7 +66,7 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 			closeChan <- struct{}{}
 			return
 		default:
-			job, err := PopCallback()
+			job, err := n.Storage.PopCallback()
 			if err != nil {
 				if _, ok := err.(QueueEmptyError); ok {
 					time.Sleep(time.Second)
@@ -77,16 +83,16 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 // Notify posts callback info to the Job's CallbackURL
 // using the provided http.Client
 func (n *Notifier) Notify(j *Job) {
-	j.SetCallbackState(StateInProgress)
+	n.Storage.SetCallbackState(j, StateInProgress)
 	cbInfo, err := j.callbackInfo()
 	if err != nil {
-		j.SetState(StateFailed, err.Error())
+		n.Storage.SetState(j, StateFailed, err.Error())
 		return
 	}
 
 	cb, err := json.Marshal(cbInfo)
 	if err != nil {
-		j.SetState(StateFailed, err.Error())
+		n.Storage.SetState(j, StateFailed, err.Error())
 		return
 	}
 
@@ -95,11 +101,11 @@ func (n *Notifier) Notify(j *Job) {
 		if err == nil {
 			err = fmt.Errorf("Received Status: %s", res.Status)
 		}
-		j.SetCallbackState(StateFailed, err.Error())
+		n.Storage.SetCallbackState(j, StateFailed, err.Error())
 		return
 	}
 
-	j.SetCallbackState(StateSuccess)
+	n.Storage.SetCallbackState(j, StateSuccess)
 }
 
 // retryOrFail checks the callback count of the current download
@@ -109,8 +115,8 @@ func (n *Notifier) Notify(j *Job) {
 // TODO: isn't used anywhere. Why?
 func (n *Notifier) retryOrFail(j *Job, err string) error {
 	if j.CallbackCount >= MaxCBRetries {
-		return j.SetCallbackState(StateFailed, err)
+		return n.Storage.SetCallbackState(j, StateFailed, err)
 	}
 	j.CallbackCount++
-	return j.QueuePendingCallback()
+	return n.Storage.QueuePendingCallback(j)
 }

@@ -55,6 +55,8 @@ const (
 // the processor to the active worker pools, stopping any in-progress jobs and
 // gracefully shutting down the corresponding workers.
 type Processor struct {
+	Storage *Storage
+
 	// ScanInterval is the amount of seconds to wait before re-scanning
 	// Redis for new Aggregations.
 	ScanInterval int
@@ -88,7 +90,7 @@ type workerPool struct {
 
 // NewProcessor initializes and returns a Processor, or an error if storageDir
 // is not writable.
-func NewProcessor(scanInterval int, storageDir string, client *http.Client,
+func NewProcessor(storage *Storage, scanInterval int, storageDir string, client *http.Client,
 	logger *log.Logger) (Processor, error) {
 	// verify we can write to storageDir
 	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
@@ -111,6 +113,7 @@ func NewProcessor(scanInterval int, storageDir string, client *http.Client,
 	}
 
 	return Processor{
+		Storage:      storage,
 		StorageDir:   storageDir,
 		ScanInterval: scanInterval,
 		Client:       client,
@@ -146,15 +149,15 @@ PROCESSOR_LOOP:
 			for {
 				var keys []string
 				var err error
-				if keys, cursor, err = Redis.Scan(cursor, aggrKeyPrefix+"*", 50).Result(); err != nil {
+				if keys, cursor, err = p.Storage.Redis.Scan(cursor, AggrKeyPrefix+"*", 50).Result(); err != nil {
 					p.Log.Println(fmt.Errorf("Could not scan keys: %v", err))
 					break
 				}
 
 				for _, ag := range keys {
-					aggrID := strings.TrimPrefix(ag, aggrKeyPrefix)
+					aggrID := strings.TrimPrefix(ag, AggrKeyPrefix)
 					if _, ok := p.pools[aggrID]; !ok {
-						aggr, err := GetAggregation(aggrID)
+						aggr, err := p.Storage.GetAggregation(aggrID)
 						if err != nil {
 							p.Log.Printf("Could not get aggregation %s: %v", aggrID, err)
 							continue
@@ -230,7 +233,7 @@ WORKERPOOL_LOOP:
 			close(wp.jobChan)
 			break WORKERPOOL_LOOP
 		default:
-			job, err := wp.aggr.PopJob()
+			job, err := wp.p.Storage.PopJob(&wp.aggr)
 			if err != nil {
 				if _, ok := err.(QueueEmptyError); ok {
 					// No job found, backing off
@@ -286,55 +289,55 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 // perform downloads the resource denoted by j.URL and updates its state in
 // Redis accordingly. It may retry downloading on certain errors.
 func (wp *workerPool) perform(ctx context.Context, j *Job) {
-	j.SetState(StateInProgress)
+	wp.p.Storage.SetState(j, StateInProgress)
 	out, err := os.Create(wp.p.StorageDir + j.ID)
 	if err != nil {
-		requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
+		wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
 		return
 	}
 	defer out.Close()
 
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
-		requeueOrFail(j, fmt.Sprintf("Could not create request, %v", err))
+		wp.requeueOrFail(j, fmt.Sprintf("Could not create request, %v", err))
 		return
 	}
 
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = j.SetState(StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
+			err = wp.p.Storage.SetState(j, StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
 			if err != nil {
 				wp.log.Println(err)
 			}
 			return
 		}
 
-		requeueOrFail(j, err.Error())
+		wp.requeueOrFail(j, err.Error())
 		return
 	}
 
 	if resp.StatusCode >= http.StatusInternalServerError {
-		requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
+		wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-		j.SetState(StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
+		wp.p.Storage.SetState(j, StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
 		return
 	}
 	defer resp.Body.Close()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		requeueOrFail(j, fmt.Sprintf("Could not download file, %v", err))
+		wp.requeueOrFail(j, fmt.Sprintf("Could not download file, %v", err))
 		return
 	}
 
-	if err = j.SetState(StateSuccess); err != nil {
+	if err = wp.p.Storage.SetState(j, StateSuccess); err != nil {
 		wp.log.Println(err)
 		return
 	}
 
-	if err = j.QueuePendingCallback(); err != nil {
+	if err = wp.p.Storage.QueuePendingCallback(j); err != nil {
 		wp.log.Println(err)
 	}
 }
@@ -342,10 +345,10 @@ func (wp *workerPool) perform(ctx context.Context, j *Job) {
 // requeueOrFail checks the retry count of the current download
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
-func requeueOrFail(j *Job, err string) error {
+func (wp *workerPool) requeueOrFail(j *Job, err string) error {
 	if j.RetryCount >= MaxDownloadRetries {
-		return j.SetState(StateFailed, err)
+		return wp.p.Storage.SetState(j, StateFailed, err)
 	}
 	j.RetryCount++
-	return j.QueuePendingDownload()
+	return wp.p.Storage.QueuePendingDownload(j)
 }
