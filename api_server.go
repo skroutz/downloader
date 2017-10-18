@@ -14,13 +14,12 @@ type APIServer struct {
 func NewAPIServer(s *Storage, host string, port int) *APIServer {
 	as := &APIServer{Storage: s}
 	mux := http.NewServeMux()
-	mux.Handle("/download/", as)
+	mux.Handle("/download", as)
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	return as
 }
 
 // ServeHTTP enqueues new downloads to the backend Redis instance
-// TODO: Why the receiver cannot be a pointer???
 func (as *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
