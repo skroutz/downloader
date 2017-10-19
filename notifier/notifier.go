@@ -93,16 +93,16 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 // Notify posts callback info to the Job's CallbackURL
 // using the provided http.Client
 func (n *Notifier) Notify(j *job.Job) {
-	n.Storage.SetCallbackState(j, job.StateInProgress)
+	n.Storage.UpdateCallbackState(j, job.StateInProgress)
 	cbInfo, err := getCallbackInfo(j)
 	if err != nil {
-		n.Storage.SetState(j, job.StateFailed, err.Error())
+		n.Storage.UpdateDownloadState(j, job.StateFailed, err.Error())
 		return
 	}
 
 	cb, err := json.Marshal(cbInfo)
 	if err != nil {
-		n.Storage.SetState(j, job.StateFailed, err.Error())
+		n.Storage.UpdateDownloadState(j, job.StateFailed, err.Error())
 		return
 	}
 
@@ -111,11 +111,11 @@ func (n *Notifier) Notify(j *job.Job) {
 		if err == nil {
 			err = fmt.Errorf("Received Status: %s", res.Status)
 		}
-		n.Storage.SetCallbackState(j, job.StateFailed, err.Error())
+		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
 		return
 	}
 
-	n.Storage.SetCallbackState(j, job.StateSuccess)
+	n.Storage.UpdateCallbackState(j, job.StateSuccess)
 }
 
 // retryOrFail checks the callback count of the current download
@@ -125,7 +125,7 @@ func (n *Notifier) Notify(j *job.Job) {
 // TODO: isn't used anywhere. Why?
 func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
-		return n.Storage.SetCallbackState(j, job.StateFailed, err)
+		return n.Storage.UpdateCallbackState(j, job.StateFailed, err)
 	}
 	j.CallbackCount++
 	return n.Storage.QueuePendingCallback(j)

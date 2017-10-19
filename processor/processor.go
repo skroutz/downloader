@@ -291,7 +291,7 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 // perform downloads the resource denoted by j.URL and updates its state in
 // Redis accordingly. It may retry downloading on certain errors.
 func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
-	wp.p.Storage.SetState(j, job.StateInProgress)
+	wp.p.Storage.UpdateDownloadState(j, job.StateInProgress)
 	out, err := os.Create(wp.p.StorageDir + j.ID)
 	if err != nil {
 		wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
@@ -308,7 +308,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = wp.p.Storage.SetState(j, job.StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
+			err = wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
 			if err != nil {
 				wp.log.Println(err)
 			}
@@ -323,7 +323,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-		wp.p.Storage.SetState(j, job.StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
+		wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
 		return
 	}
 	defer resp.Body.Close()
@@ -334,7 +334,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		return
 	}
 
-	if err = wp.p.Storage.SetState(j, job.StateSuccess); err != nil {
+	if err = wp.p.Storage.UpdateDownloadState(j, job.StateSuccess); err != nil {
 		wp.log.Println(err)
 		return
 	}
@@ -349,7 +349,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 // it as failed
 func (wp *workerPool) requeueOrFail(j *job.Job, err string) error {
 	if j.DownloadCount >= maxDownloadRetries {
-		return wp.p.Storage.SetState(j, job.StateFailed, err)
+		return wp.p.Storage.UpdateDownloadState(j, job.StateFailed, err)
 	}
 	j.DownloadCount++
 	return wp.p.Storage.QueuePendingDownload(j)
