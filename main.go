@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.skroutz.gr/skroutz/downloader/api"
 	"golang.skroutz.gr/skroutz/downloader/notifier"
 	"golang.skroutz.gr/skroutz/downloader/processor"
 	"golang.skroutz.gr/skroutz/downloader/storage"
@@ -60,12 +61,12 @@ func main() {
 				if err != nil {
 					return err
 				}
-				as := NewAPIServer(storage, c.String("host"), c.Int("port"))
+				api := api.New(storage, c.String("host"), c.Int("port"))
 
 				logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
 				go func() {
-					logger.Println(fmt.Sprintf("Listening on %s...", as.Server.Addr))
-					err := as.Server.ListenAndServe()
+					logger.Println(fmt.Sprintf("Listening on %s...", api.Server.Addr))
+					err := api.Server.ListenAndServe()
 					if err != nil && err != http.ErrServerClosed {
 						logger.Fatal(err)
 					}
@@ -73,7 +74,7 @@ func main() {
 
 				<-sigCh
 				logger.Println("Shutting down gracefully...")
-				err = as.Server.Shutdown(context.TODO())
+				err = api.Server.Shutdown(context.TODO())
 				if err != nil {
 					return err
 				}
