@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -54,7 +52,7 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				storage, err := NewStorage(redisClient("api", cfg.Redis.Host, cfg.Redis.Port))
+				storage, err := NewStorage(redisClient("api", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
@@ -96,7 +94,7 @@ func main() {
 				client := &http.Client{
 					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
 					Timeout:   time.Duration(3) * time.Second}
-				storage, err := NewStorage(redisClient("processor", cfg.Redis.Host, cfg.Redis.Port))
+				storage, err := NewStorage(redisClient("processor", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
@@ -132,7 +130,7 @@ func main() {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				logger := log.New(os.Stderr, "[Notifier] ", log.Ldate|log.Ltime)
-				storage, err := NewStorage(redisClient("notifier", cfg.Redis.Host, cfg.Redis.Port))
+				storage, err := NewStorage(redisClient("notifier", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
@@ -173,7 +171,7 @@ func BeforeCommand(c *cli.Context) error {
 	return dec.Decode(&cfg)
 }
 
-func redisClient(name, host string, port int) *redis.Client {
+func redisClient(name, addr string) *redis.Client {
 	setName := func(c *redis.Conn) error {
 		ok, err := c.ClientSetName(name).Result()
 		if err != nil {
@@ -184,10 +182,5 @@ func redisClient(name, host string, port int) *redis.Client {
 		}
 		return nil
 	}
-
-	return redis.NewClient(
-		&redis.Options{
-			Addr:      strings.Join([]string{host, strconv.Itoa(port)}, ":"),
-			OnConnect: setName,
-		})
+	return redis.NewClient(&redis.Options{Addr: addr, OnConnect: setName})
 }
