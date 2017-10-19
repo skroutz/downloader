@@ -1,4 +1,4 @@
-package main
+package processor
 
 import (
 	"context"
@@ -21,10 +21,7 @@ import (
 const (
 	workerMaxInactivity = 5 * time.Second
 	backoffDuration     = 1 * time.Second
-
-	// TODO: rename to MaxRetries when this is extracted into its own
-	// package
-	MaxDownloadRetries = 3
+	maxDownloadRetries  = 3
 )
 
 // Processor is one of the core entities of the downloader. It facilitates the
@@ -91,9 +88,9 @@ type workerPool struct {
 	jobChan chan job.Job
 }
 
-// NewProcessor initializes and returns a Processor, or an error if storageDir
+// New initializes and returns a Processor, or an error if storageDir
 // is not writable.
-func NewProcessor(storage *storage.Storage, scanInterval int, storageDir string, client *http.Client,
+func New(storage *storage.Storage, scanInterval int, storageDir string, client *http.Client,
 	logger *log.Logger) (Processor, error) {
 	// verify we can write to storageDir
 	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
@@ -351,7 +348,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
 func (wp *workerPool) requeueOrFail(j *job.Job, err string) error {
-	if j.DownloadCount >= MaxDownloadRetries {
+	if j.DownloadCount >= maxDownloadRetries {
 		return wp.p.Storage.SetState(j, job.StateFailed, err)
 	}
 	j.DownloadCount++

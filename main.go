@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.skroutz.gr/skroutz/downloader/processor"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 
 	"github.com/go-redis/redis"
@@ -101,7 +102,7 @@ func main() {
 					return err
 				}
 				logger := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
-				processor, err := NewProcessor(storage, 3, cfg.Processor.StorageDir, client, logger)
+				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, client, logger)
 				if err != nil {
 					return err
 				}
