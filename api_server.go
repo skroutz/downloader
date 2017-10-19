@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+
+	"golang.skroutz.gr/skroutz/downloader/job"
 )
 
 type APIServer struct {
@@ -26,7 +28,7 @@ func (as *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	decoder := json.NewDecoder(r.Body)
-	j := new(Job)
+	j := new(job.Job)
 	err := decoder.Decode(j)
 	if err != nil {
 		http.Error(w, "Error converting results to json",
@@ -48,7 +50,7 @@ func (as *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: limit should be given from the request instead
-	aggr, err := NewAggregation(j.AggrID, 8)
+	aggr, err := job.NewAggregation(j.AggrID, 8)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}

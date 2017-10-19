@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.skroutz.gr/skroutz/downloader/job"
 )
 
 // TODO: these should all be configuration options provided by the caller
@@ -78,14 +80,14 @@ type Processor struct {
 // workers that perform the actual downloads and enforces the rate-limit rules
 // of the corresponding Aggregation.
 type workerPool struct {
-	aggr             Aggregation
+	aggr             job.Aggregation
 	p                *Processor
 	numActiveWorkers int32
 	log              *log.Logger
 
 	// jobChan is the channel that distributes jobs to the respective
 	// workers
-	jobChan chan Job
+	jobChan chan job.Job
 }
 
 // NewProcessor initializes and returns a Processor, or an error if storageDir
@@ -190,12 +192,12 @@ PROCESSOR_LOOP:
 }
 
 // newWorkerPool initializes and returns a WorkerPool for aggr.
-func (p *Processor) newWorkerPool(aggr Aggregation) workerPool {
+func (p *Processor) newWorkerPool(aggr job.Aggregation) workerPool {
 	logPrefix := fmt.Sprintf("%s[worker pool:%s] ", p.Log.Prefix(), aggr.ID)
 
 	return workerPool{
 		aggr:    aggr,
-		jobChan: make(chan Job),
+		jobChan: make(chan job.Job),
 		p:       p,
 		log:     log.New(os.Stderr, logPrefix, log.Ldate|log.Ltime)}
 }
@@ -290,8 +292,8 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 
 // perform downloads the resource denoted by j.URL and updates its state in
 // Redis accordingly. It may retry downloading on certain errors.
-func (wp *workerPool) perform(ctx context.Context, j *Job) {
-	wp.p.Storage.SetState(j, StateInProgress)
+func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
+	wp.p.Storage.SetState(j, job.StateInProgress)
 	out, err := os.Create(wp.p.StorageDir + j.ID)
 	if err != nil {
 		wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
@@ -308,7 +310,7 @@ func (wp *workerPool) perform(ctx context.Context, j *Job) {
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = wp.p.Storage.SetState(j, StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
+			err = wp.p.Storage.SetState(j, job.StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
 			if err != nil {
 				wp.log.Println(err)
 			}
@@ -323,7 +325,7 @@ func (wp *workerPool) perform(ctx context.Context, j *Job) {
 		wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-		wp.p.Storage.SetState(j, StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
+		wp.p.Storage.SetState(j, job.StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
 		return
 	}
 	defer resp.Body.Close()
@@ -334,7 +336,7 @@ func (wp *workerPool) perform(ctx context.Context, j *Job) {
 		return
 	}
 
-	if err = wp.p.Storage.SetState(j, StateSuccess); err != nil {
+	if err = wp.p.Storage.SetState(j, job.StateSuccess); err != nil {
 		wp.log.Println(err)
 		return
 	}
@@ -347,9 +349,9 @@ func (wp *workerPool) perform(ctx context.Context, j *Job) {
 // requeueOrFail checks the retry count of the current download
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
-func (wp *workerPool) requeueOrFail(j *Job, err string) error {
+func (wp *workerPool) requeueOrFail(j *job.Job, err string) error {
 	if j.DownloadCount >= MaxDownloadRetries {
-		return wp.p.Storage.SetState(j, StateFailed, err)
+		return wp.p.Storage.SetState(j, job.StateFailed, err)
 	}
 	j.DownloadCount++
 	return wp.p.Storage.QueuePendingDownload(j)

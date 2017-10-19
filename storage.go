@@ -6,14 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.skroutz.gr/skroutz/downloader/job"
+
 	"github.com/go-redis/redis"
 )
-
-type QueueEmptyError string
-
-func (err QueueEmptyError) Error() string {
-	return fmt.Sprintf("Queue %s is empty", err)
-}
 
 const (
 	// Each aggregation has a corresponding Redis Hash named in the form
@@ -37,12 +33,10 @@ const (
 	CallbackQueue = "CallbackQueue"
 )
 
-// CallbackInfo holds the info to be posted back to the provided callback url of the caller
-type CallbackInfo struct {
-	Success     bool   `json:"success"`
-	Error       string `json:"error"`
-	Extra       string `json:"extra"`
-	DownloadURL string `json:"download_url"`
+type QueueEmptyError string
+
+func (err QueueEmptyError) Error() string {
+	return fmt.Sprintf("Queue %s is empty", err)
 }
 
 type Storage struct {
@@ -66,8 +60,8 @@ func NewStorage(r *redis.Client) (*Storage, error) {
 }
 
 // SaveJob updates or creates j in Redis.
-func (s *Storage) SaveJob(j *Job) error {
-	m, err := j.toMap()
+func (s *Storage) SaveJob(j *job.Job) error {
+	m, err := jobToMap(j)
 	if err != nil {
 		return err
 	}
@@ -76,32 +70,9 @@ func (s *Storage) SaveJob(j *Job) error {
 	return err
 }
 
-func (j *Job) toMap() (map[string]interface{}, error) {
-	out := make(map[string]interface{})
-
-	v := reflect.ValueOf(j)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	// we only accept structs
-	if v.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("ToMap only accepts structs; got %T", v)
-	}
-
-	typ := v.Type()
-	for i := 0; i < v.NumField(); i++ {
-		// gets us a StructField
-		fi := typ.Field(i)
-		// set key of map to value in struct field
-		out[fi.Name] = v.Field(i).Interface()
-	}
-	return out, nil
-}
-
-func jobFromMap(m map[string]string) (Job, error) {
+func jobFromMap(m map[string]string) (job.Job, error) {
 	var err error
-	j := Job{}
+	j := job.Job{}
 	for k, v := range m {
 		switch k {
 		case "ID":
@@ -111,7 +82,7 @@ func jobFromMap(m map[string]string) (Job, error) {
 		case "AggrID":
 			j.AggrID = v
 		case "DownloadState":
-			j.DownloadState = State(v)
+			j.DownloadState = job.State(v)
 		case "DownloadCount":
 			j.DownloadCount, err = strconv.Atoi(v)
 			if err != nil {
@@ -127,7 +98,7 @@ func jobFromMap(m map[string]string) (Job, error) {
 				return j, fmt.Errorf("Could not decode struct from map: %v", err)
 			}
 		case "CallbackState":
-			j.CallbackState = State(v)
+			j.CallbackState = job.State(v)
 		case "Extra":
 			j.Extra = v
 		default:
@@ -138,13 +109,13 @@ func jobFromMap(m map[string]string) (Job, error) {
 }
 
 // GetJob fetches the Job with the given id from Redis.
-func (s *Storage) GetJob(id string) (Job, error) {
+func (s *Storage) GetJob(id string) (job.Job, error) {
 	cmd := s.Redis.HGetAll(JobKeyPrefix + id)
 	return jobFromMap(cmd.Val())
 }
 
 // Exists checks if a job exists in Redis
-func (s *Storage) JobExists(j *Job) (bool, error) {
+func (s *Storage) JobExists(j *job.Job) (bool, error) {
 	res, err := s.Redis.Exists(JobKeyPrefix + j.ID).Result()
 
 	if err != nil {
@@ -156,8 +127,8 @@ func (s *Storage) JobExists(j *Job) (bool, error) {
 
 // QueuePendingDownload sets the state of a job to "Pending", saves it and
 // adds it to its aggregation queue
-func (s *Storage) QueuePendingDownload(j *Job) error {
-	j.DownloadState = StatePending
+func (s *Storage) QueuePendingDownload(j *job.Job) error {
+	j.DownloadState = job.StatePending
 	err := s.SaveJob(j)
 	if err != nil {
 		return err
@@ -167,8 +138,8 @@ func (s *Storage) QueuePendingDownload(j *Job) error {
 }
 
 // QueuePendingCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
-func (s *Storage) QueuePendingCallback(j *Job) error {
-	j.CallbackState = StatePending
+func (s *Storage) QueuePendingCallback(j *job.Job) error {
+	j.CallbackState = job.StatePending
 	err := s.SaveJob(j)
 	if err != nil {
 		return err
@@ -177,51 +148,30 @@ func (s *Storage) QueuePendingCallback(j *Job) error {
 }
 
 // SetState changes the current Job state to the provided value and reports any errors
-func (s *Storage) SetState(j *Job, state State, meta ...string) error {
+func (s *Storage) SetState(j *job.Job, state job.State, meta ...string) error {
 	j.DownloadState = state
 	j.Meta = strings.Join(meta, "\n")
 	return s.SaveJob(j)
 }
 
 // SetCallbackState changes the current Job state to the provided value and reports any errors
-func (s *Storage) SetCallbackState(j *Job, state State, meta ...string) error {
+func (s *Storage) SetCallbackState(j *job.Job, state job.State, meta ...string) error {
 	j.CallbackState = state
 	j.Meta = strings.Join(meta, "\n")
 	return s.SaveJob(j)
-}
-
-// callbackInfo validates that the job is good for callback and
-// return callbackInfo to the caller
-func (j *Job) callbackInfo() (CallbackInfo, error) {
-	if j.DownloadState != StateSuccess && j.DownloadState != StateFailed {
-		return CallbackInfo{}, fmt.Errorf("Invalid Job State %s", j.DownloadState)
-	}
-
-	return CallbackInfo{
-		Success:     j.DownloadState == StateSuccess,
-		Error:       j.Meta,
-		Extra:       j.Extra,
-		DownloadURL: j.downloadURL(),
-	}, nil
-}
-
-// downloadURL constructs the actual download URL to be provided to the user.
-// TODO: Actually make it smart
-func (j *Job) downloadURL() string {
-	return fmt.Sprintf("http://localhost/%s", j.ID)
 }
 
 // PopCallback attempts to pop a Job from the callback queue.
 // If it succeeds the job with the popped ID is returned.
 //
 // TODO: this should be a method on notifier
-func (s *Storage) PopCallback() (Job, error) {
+func (s *Storage) PopCallback() (job.Job, error) {
 	cmd := s.Redis.LPop(CallbackQueue)
 	if err := cmd.Err(); err != nil {
 		if cmd.Err().Error() != "redis: nil" {
-			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
+			return job.Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
 		}
-		return Job{}, QueueEmptyError(CallbackQueue)
+		return job.Job{}, QueueEmptyError(CallbackQueue)
 	}
 
 	return s.GetJob(cmd.Val())
@@ -229,40 +179,28 @@ func (s *Storage) PopCallback() (Job, error) {
 
 // GetAggregation fetches from Redis the aggregation denoted by id. If the
 // aggregation was not found, an error is returned.
-func (s *Storage) GetAggregation(id string) (Aggregation, error) {
+func (s *Storage) GetAggregation(id string) (job.Aggregation, error) {
 	// TODO(agis): this shouldn't be needed. We can get rid of it if we
 	// move the `RedisKey` method out of `Aggregation`
-	aggr := Aggregation{ID: id}
+	aggr := job.Aggregation{ID: id}
 
 	cmd := s.Redis.HGet(AggrKeyPrefix+id, "Limit")
 	err := cmd.Err()
 	if err != nil {
-		return Aggregation{}, err
+		return job.Aggregation{}, err
 	}
 
 	limit, err := strconv.Atoi(cmd.Val())
 	if err != nil {
-		return Aggregation{}, err
+		return job.Aggregation{}, err
 	}
 	aggr.Limit = limit
 
 	return aggr, nil
 }
 
-// Return the Redis key
-// TODO: ELIMINATE USAGES OF THIS
-func (aggr *Aggregation) RedisKey() string {
-	return AggrKeyPrefix + aggr.ID
-}
-
-// Return the Redis job list key
-// TODO: ELIMINATE THIS
-func (aggr *Aggregation) RedisJobsKey() string {
-	return JobsKeyPrefix + aggr.ID
-}
-
 // Save updates/creates the current aggregation in redis.
-func (s *Storage) SaveAggregation(a *Aggregation) error {
+func (s *Storage) SaveAggregation(a *job.Aggregation) error {
 	cmd := s.Redis.HSet(AggrKeyPrefix+a.ID, "Limit", a.Limit)
 	return cmd.Err()
 }
@@ -277,7 +215,7 @@ func (s *Storage) RemoveAggregation(id string) error {
 }
 
 // Exists checks if the given aggregation exists in the Redis
-func (s *Storage) AggregationExists(a *Aggregation) (bool, error) {
+func (s *Storage) AggregationExists(a *job.Aggregation) (bool, error) {
 	res, err := s.Redis.Exists(AggrKeyPrefix + a.ID).Result()
 
 	if err != nil {
@@ -289,14 +227,41 @@ func (s *Storage) AggregationExists(a *Aggregation) (bool, error) {
 
 // PopJob attempts to pop a Job for that aggregation.
 // If it succeeds the job with the popped ID is returned.
-func (s *Storage) PopJob(a *Aggregation) (Job, error) {
+func (s *Storage) PopJob(a *job.Aggregation) (job.Job, error) {
 	cmd := s.Redis.LPop(JobsKeyPrefix + a.ID)
 	if err := cmd.Err(); err != nil {
 		if cmd.Err().Error() != "redis: nil" {
-			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
+			return job.Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
 		}
-		return Job{}, QueueEmptyError(a.RedisJobsKey())
+		return job.Job{}, QueueEmptyError(redisJobsKey(a))
+	}
+	return s.GetJob(cmd.Val())
+}
+
+// Return the Redis jobs list key
+func redisJobsKey(a *job.Aggregation) string {
+	return JobsKeyPrefix + a.ID
+}
+
+func jobToMap(j *job.Job) (map[string]interface{}, error) {
+	out := make(map[string]interface{})
+
+	v := reflect.ValueOf(j)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
 	}
 
-	return s.GetJob(cmd.Val())
+	// we only accept structs
+	if v.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("jobToMap only accepts structs; got %T", v)
+	}
+
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		// gets us a StructField
+		fi := typ.Field(i)
+		// set key of map to value in struct field
+		out[fi.Name] = v.Field(i).Interface()
+	}
+	return out, nil
 }
