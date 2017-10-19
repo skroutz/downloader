@@ -149,7 +149,7 @@ func (s *Storage) GetAggregation(id string) (job.Aggregation, error) {
 		return job.Aggregation{}, err
 	}
 
-	return job.Aggregation{id, limit}, nil
+	return job.Aggregation{ID: id, Limit: limit}, nil
 }
 
 // Save updates/creates the current aggregation in redis.
