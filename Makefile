@@ -1,7 +1,6 @@
 .PHONY: install build test lint vet fmt clean list
 
 install: vet fmt test
-	go build -v
 	go install -v
 
 test:
