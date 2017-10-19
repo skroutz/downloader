@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -53,7 +54,7 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				storage, err := NewStorage(redisClient(cfg.Redis.Host, cfg.Redis.Port))
+				storage, err := NewStorage(redisClient("api", cfg.Redis.Host, cfg.Redis.Port))
 				if err != nil {
 					return err
 				}
@@ -95,7 +96,7 @@ func main() {
 				client := &http.Client{
 					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
 					Timeout:   time.Duration(3) * time.Second}
-				storage, err := NewStorage(redisClient(cfg.Redis.Host, cfg.Redis.Port))
+				storage, err := NewStorage(redisClient("processor", cfg.Redis.Host, cfg.Redis.Port))
 				if err != nil {
 					return err
 				}
@@ -131,7 +132,7 @@ func main() {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				logger := log.New(os.Stderr, "[Notifier] ", log.Ldate|log.Ltime)
-				storage, err := NewStorage(redisClient(cfg.Redis.Host, cfg.Redis.Port))
+				storage, err := NewStorage(redisClient("notifier", cfg.Redis.Host, cfg.Redis.Port))
 				if err != nil {
 					return err
 				}
@@ -172,9 +173,21 @@ func BeforeCommand(c *cli.Context) error {
 	return dec.Decode(&cfg)
 }
 
-func redisClient(host string, port int) *redis.Client {
+func redisClient(name, host string, port int) *redis.Client {
+	setName := func(c *redis.Conn) error {
+		ok, err := c.ClientSetName(name).Result()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("Error setting Redis client name to " + name)
+		}
+		return nil
+	}
+
 	return redis.NewClient(
 		&redis.Options{
-			Addr: strings.Join([]string{host, strconv.Itoa(port)}, ":"),
+			Addr:      strings.Join([]string{host, strconv.Itoa(port)}, ":"),
+			OnConnect: setName,
 		})
 }
