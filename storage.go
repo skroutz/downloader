@@ -17,13 +17,17 @@ func (err QueueEmptyError) Error() string {
 
 const (
 	// Each aggregation has a corresponding Redis Hash named in the form
-	// "<aggrKeyPrefix><aggregation-id>" and containing various information
+	// "<AggrKeyPrefix><aggregation-id>" and containing various information
 	// about the aggregation itself (eg. its limit).
 	AggrKeyPrefix = "aggr:"
 
-	// Individual job IDs of an aggregation exist in a Redis List named
-	// in the form "jobs:<aggregation-id>".
-	JobKeyPrefix = "jobs:"
+	// Job IDs of an individual aggregation exist in a Redis List named
+	// in the form "<JobsKeyPrefix><aggregation-id>".
+	JobsKeyPrefix = "jobs:"
+
+	// Each Job has a corresponding Redis Hash named in the form of
+	// "<JobKeyPrefix><job-id>"
+	JobKeyPrefix = "job:"
 
 	// IDs of jobs that are completed and their callback is to be executed
 	// are in this Redis List.
@@ -67,7 +71,7 @@ func (s *Storage) SaveJob(j *Job) error {
 	if err != nil {
 		return err
 	}
-	scmd := s.Redis.HMSet(j.ID, m)
+	scmd := s.Redis.HMSet(JobKeyPrefix+j.ID, m)
 	_, err = scmd.Result()
 	return err
 }
@@ -135,13 +139,13 @@ func jobFromMap(m map[string]string) (Job, error) {
 
 // GetJob fetches the Job with the given id from Redis.
 func (s *Storage) GetJob(id string) (Job, error) {
-	cmd := s.Redis.HGetAll(id)
+	cmd := s.Redis.HGetAll(JobKeyPrefix + id)
 	return jobFromMap(cmd.Val())
 }
 
 // Exists checks if a job exists in Redis
 func (s *Storage) JobExists(j *Job) (bool, error) {
-	res, err := s.Redis.Exists(j.ID).Result()
+	res, err := s.Redis.Exists(JobKeyPrefix + j.ID).Result()
 
 	if err != nil {
 		return false, err
@@ -158,7 +162,7 @@ func (s *Storage) QueuePendingDownload(j *Job) error {
 	if err != nil {
 		return err
 	}
-	intcmd := s.Redis.RPush(JobKeyPrefix+j.AggrID, j.ID)
+	intcmd := s.Redis.RPush(JobsKeyPrefix+j.AggrID, j.ID)
 	return intcmd.Err()
 }
 
@@ -254,7 +258,7 @@ func (aggr *Aggregation) RedisKey() string {
 // Return the Redis job list key
 // TODO: ELIMINATE THIS
 func (aggr *Aggregation) RedisJobsKey() string {
-	return JobKeyPrefix + aggr.ID
+	return JobsKeyPrefix + aggr.ID
 }
 
 // Save updates/creates the current aggregation in redis.
@@ -286,7 +290,7 @@ func (s *Storage) AggregationExists(a *Aggregation) (bool, error) {
 // PopJob attempts to pop a Job for that aggregation.
 // If it succeeds the job with the popped ID is returned.
 func (s *Storage) PopJob(a *Aggregation) (Job, error) {
-	cmd := s.Redis.LPop(JobKeyPrefix + a.ID)
+	cmd := s.Redis.LPop(JobsKeyPrefix + a.ID)
 	if err := cmd.Err(); err != nil {
 		if cmd.Err().Error() != "redis: nil" {
 			return Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
