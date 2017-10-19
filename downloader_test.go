@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -49,6 +50,7 @@ func TestMain(m *testing.M) {
 		Handler: mux,
 		Addr:    fmt.Sprintf("%s:%s", fileServerHost, fileServerPort)}
 
+	flag.Parse()
 	purgeRedis()
 
 	// start test file server
@@ -171,7 +173,7 @@ FILECHECK:
 	actualCallback := string(<-cbChan)
 
 	if expectedCallback != actualCallback {
-		t.Fatal("Expected callback %s, got %s")
+		t.Fatalf("Expected callback %s, got %s", expectedCallback, actualCallback)
 	}
 
 	// shutdown callbackServer
@@ -217,7 +219,7 @@ func postJob(data map[string]string, t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 201 {
-		t.Fatalf("Expected 201 response, got %s", resp.StatusCode)
+		t.Fatalf("Expected 201 response, got %d", resp.StatusCode)
 	}
 }
 
