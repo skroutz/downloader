@@ -123,7 +123,8 @@ func main() {
 			Before: parseConfig,
 		},
 		cli.Command{
-			Name: "notifier",
+			Name:  "notifier",
+			Usage: "Start the notifier",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "config, c",
