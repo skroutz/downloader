@@ -12,6 +12,8 @@ const (
 //
 // It is the core entity of the downloader and holds all info and state of
 // the download.
+//
+// TODO: should this be valid with an empty aggregation id?
 type Job struct {
 	// Auto-generated
 	ID string `json:"id"`
@@ -20,6 +22,8 @@ type Job struct {
 	URL string `json:"url"`
 
 	// AggrID is the ID of the aggregation the job belongs to.
+	//
+	// TODO: should this be a pointer to an Aggregation?
 	AggrID string `json:"aggr_id"`
 
 	DownloadState State `json:"-"`

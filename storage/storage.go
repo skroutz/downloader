@@ -60,6 +60,8 @@ func New(r *redis.Client) (*Storage, error) {
 }
 
 // SaveJob updates or creates j in Redis.
+//
+// TODO: should we check that the corresponding aggregation exists in redis?
 func (s *Storage) SaveJob(j *job.Job) error {
 	m, err := jobToMap(j)
 	if err != nil {
@@ -91,6 +93,8 @@ func (s *Storage) AggregationExists(a *job.Aggregation) (bool, error) {
 
 // QueuePendingDownload sets the state of a job to "Pending", saves it and
 // adds it to its aggregation queue
+//
+// TODO: should we check that job already exists in redis? maybe do HSET instead?
 func (s *Storage) QueuePendingDownload(j *job.Job) error {
 	j.DownloadState = job.StatePending
 	err := s.SaveJob(j)
