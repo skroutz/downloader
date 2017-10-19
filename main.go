@@ -76,7 +76,7 @@ func main() {
 				logger.Println("Bye!")
 				return nil
 			},
-			Before: BeforeCommand,
+			Before: parseConfig,
 		},
 		cli.Command{
 			Name:  "processor",
@@ -115,7 +115,7 @@ func main() {
 				processor.Log.Println("Bye!")
 				return nil
 			},
-			Before: BeforeCommand,
+			Before: parseConfig,
 		},
 		cli.Command{
 			Name: "notifier",
@@ -147,7 +147,7 @@ func main() {
 				logger.Println("Bye!")
 				return nil
 			},
-			Before: BeforeCommand,
+			Before: parseConfig,
 		},
 	}
 
@@ -156,10 +156,10 @@ func main() {
 	}
 }
 
-// BeforeCommand extracts configuration from the provided config file and initializes redis
+// parseConfig extracts configuration from the provided config file and initializes redis
 // TODO: make this an ordinary helper function so we can make it return
 // a Storage and use it when we want to
-func BeforeCommand(c *cli.Context) error {
+func parseConfig(c *cli.Context) error {
 	f, err := os.Open(c.String("config"))
 	if err != nil {
 		return err

@@ -112,8 +112,8 @@ func jobFromMap(m map[string]string) (Job, error) {
 			j.AggrID = v
 		case "DownloadState":
 			j.DownloadState = State(v)
-		case "RetryCount":
-			j.RetryCount, err = strconv.Atoi(v)
+		case "DownloadCount":
+			j.DownloadCount, err = strconv.Atoi(v)
 			if err != nil {
 				return j, fmt.Errorf("Could not decode struct from map: %v", err)
 			}

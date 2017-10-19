@@ -24,18 +24,20 @@ type Job struct {
 
 	DownloadState State `json:"-"`
 
-	// RetryCount is how many times the download was attempted.
-	RetryCount int `json:"-"`
+	// How many times the download request was attempted
+	DownloadCount int `json:"-"`
 
 	// Auxiliary ad-hoc information. Typically used for communicating
 	// errors back to the user.
 	Meta string `json:"-"`
 
-	CallbackURL   string `json:"callback_url"`
-	CallbackCount int    `json:"-"`
 	CallbackState State  `json:"-"`
+	CallbackURL   string `json:"callback_url"`
 
-	// Contains arbitrary info provided by the user that are posted
+	// How many times the callback request was attempted
+	CallbackCount int `json:"-"`
+
+	// Arbitrary info provided by the user that are posted
 	// back during the callback
 	Extra string `json:"extra"`
 }
