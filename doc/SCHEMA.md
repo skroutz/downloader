@@ -5,14 +5,14 @@
 We have the following types of keys in Redis:
 
 1. aggregation keys: Each aggregation has a corresponding Redis Hash named in
-   the form of "<AggrKeyPrefix><aggregation-id>". Example: `aggr:beststore`
+   the form of `<AggrKeyPrefix><aggregation-id>`. Example: `aggr:beststore`
 
 2. jobs list keys: The Job IDs of each individual aggregation exist in a Redis
-   List named in the form of "<JobsKeyPrefix><aggregation-id>". Example:
+   List named in the form of `<JobsKeyPrefix><aggregation-id>`. Example:
    `jobs:beststore`
 
 3. job keys: Each Job has a corresponding Redis Hash named in the form
-   "<JobKeyPrefix><job-id>". Example: `job:3241`
+   `<JobKeyPrefix><job-id>`. Example: `job:3241`
 
 5. callback queue: A Redis List that contains the job IDs of either failed or
    completed jobs.
