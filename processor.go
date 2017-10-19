@@ -191,7 +191,7 @@ PROCESSOR_LOOP:
 
 // newWorkerPool initializes and returns a WorkerPool for aggr.
 func (p *Processor) newWorkerPool(aggr Aggregation) workerPool {
-	logPrefix := fmt.Sprintf("[Processor][WorkerPool:%s] ", aggr.ID)
+	logPrefix := fmt.Sprintf("%s[worker pool:%s] ", p.Log.Prefix(), aggr.ID)
 
 	return workerPool{
 		aggr:    aggr,
@@ -263,7 +263,9 @@ WORKERPOOL_LOOP:
 
 // work consumes Jobs from wp and performs them.
 func (wp *workerPool) work(ctx context.Context, saveDir string) {
-	defer wp.log.Println("[Worker] Bye!")
+	logger := log.New(os.Stderr, wp.log.Prefix()+"[worker] ", log.Ldate|log.Ltime)
+	defer logger.Println("Bye!")
+
 	lastActive := time.Now()
 
 	for {

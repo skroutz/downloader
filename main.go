@@ -58,7 +58,7 @@ func main() {
 				}
 				as := NewAPIServer(storage, c.String("host"), c.Int("port"))
 
-				logger := log.New(os.Stderr, "[API] ", log.Ldate|log.Ltime)
+				logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
 				go func() {
 					logger.Println(fmt.Sprintf("Listening on %s...", as.Server.Addr))
 					err := as.Server.ListenAndServe()
@@ -98,7 +98,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				logger := log.New(os.Stderr, "[Processor] ", log.Ldate|log.Ltime)
+				logger := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
 				processor, err := NewProcessor(storage, 3, cfg.Processor.StorageDir, client, logger)
 				if err != nil {
 					return err
@@ -129,7 +129,7 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				logger := log.New(os.Stderr, "[Notifier] ", log.Ldate|log.Ltime)
+				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
 				storage, err := NewStorage(redisClient("notifier", cfg.Redis.Addr))
 				if err != nil {
 					return err
