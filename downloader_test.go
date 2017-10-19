@@ -49,6 +49,8 @@ func TestMain(m *testing.M) {
 		Handler: mux,
 		Addr:    fmt.Sprintf("%s:%s", fileServerHost, fileServerPort)}
 
+	purgeRedis()
+
 	// start test file server
 	wg.Add(1)
 	go func() {
@@ -234,4 +236,12 @@ func newCallbackServer(addr string, ch chan []byte) *http.Server {
 	mux.HandleFunc(callbackServerPath, handler)
 
 	return &http.Server{Handler: mux, Addr: addr}
+}
+
+// TODO: should read addr from config
+func purgeRedis() {
+	err := redisClient("test", "localhost:6379").FlushDB().Err()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
