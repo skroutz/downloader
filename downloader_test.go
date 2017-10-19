@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"reflect"
 	"sync"
 	"testing"
@@ -133,10 +134,11 @@ func TestFileExists(t *testing.T) {
 FILECHECK:
 	for {
 		select {
-		case <-time.After(5 * time.Second):
+		case <-time.After(3 * time.Second):
 			t.Fatal("File not present on the download location after 5 seconds")
 		default:
-			downloaded, err = os.Open("downloads/999")
+			filePath := path.Join(cfg.Processor.StorageDir, "999")
+			downloaded, err = os.Open(filePath)
 			if err == nil {
 				downloadedFileStat, err := downloaded.Stat()
 				if err != nil {
@@ -146,6 +148,10 @@ FILECHECK:
 				if downloadedFileStat.Size() == servedFileStat.Size() {
 					break FILECHECK
 				}
+			} else {
+				fmt.Printf("Expected file not found (%s), retrying...\n",
+					filePath, err)
+				time.Sleep(50 * time.Millisecond)
 			}
 		}
 	}
@@ -170,10 +176,14 @@ FILECHECK:
 
 	// Test callback mechanism (Notifier)
 	expectedCallback := `{"success":true,"error":"","extra":"","download_url":"http://localhost/999"}`
-	actualCallback := string(<-cbChan)
-
-	if expectedCallback != actualCallback {
-		t.Fatalf("Expected callback %s, got %s", expectedCallback, actualCallback)
+	select {
+	case <-time.After(3 * time.Second):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-cbChan:
+		actualCallback := string(cb)
+		if expectedCallback != actualCallback {
+			t.Fatalf("Expected callback %s, got %s", expectedCallback, actualCallback)
+		}
 	}
 
 	// shutdown callbackServer
@@ -237,7 +247,13 @@ func newCallbackServer(addr string, ch chan []byte) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc(callbackServerPath, handler)
 
-	return &http.Server{Handler: mux, Addr: addr}
+	return &http.Server{
+		Handler:           mux,
+		Addr:              addr,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      5 * time.Second,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
 }
 
 // TODO: should read addr from config
