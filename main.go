@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.skroutz.gr/skroutz/downloader/notifier"
 	"golang.skroutz.gr/skroutz/downloader/processor"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 
@@ -137,7 +138,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				notifier := NewNotifier(storage, cfg.Notifier.Concurrency)
+				notifier := notifier.New(storage, cfg.Notifier.Concurrency)
 
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan)

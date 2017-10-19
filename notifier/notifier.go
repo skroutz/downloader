@@ -1,4 +1,4 @@
-package main
+package notifier
 
 import (
 	"bytes"
@@ -14,8 +14,7 @@ import (
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
-// TODO: rename to MaxRetries when notifier is extracted into its own package
-const MaxCBRetries = 2
+const maxCallbackRetries = 2
 
 // callbackInfo holds the info to be posted back to the provided callback url of the caller
 type callbackInfo struct {
@@ -40,7 +39,7 @@ type Notifier struct {
 // NewNotifier takes the concurrency of the notifier as an argument
 //
 // TODO: check concurrency is > 0
-func NewNotifier(s *storage.Storage, concurrency int) Notifier {
+func New(s *storage.Storage, concurrency int) Notifier {
 	return Notifier{
 		Storage:     s,
 		concurrency: concurrency,
@@ -125,7 +124,7 @@ func (n *Notifier) Notify(j *job.Job) {
 //
 // TODO: isn't used anywhere. Why?
 func (n *Notifier) retryOrFail(j *job.Job, err string) error {
-	if j.CallbackCount >= MaxCBRetries {
+	if j.CallbackCount >= maxCallbackRetries {
 		return n.Storage.SetCallbackState(j, job.StateFailed, err)
 	}
 	j.CallbackCount++
