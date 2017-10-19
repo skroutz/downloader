@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
 // TODO: these should all be configuration options provided by the caller
@@ -57,7 +58,7 @@ const (
 // the processor to the active worker pools, stopping any in-progress jobs and
 // gracefully shutting down the corresponding workers.
 type Processor struct {
-	Storage *Storage
+	Storage *storage.Storage
 
 	// ScanInterval is the amount of seconds to wait before re-scanning
 	// Redis for new Aggregations.
@@ -92,7 +93,7 @@ type workerPool struct {
 
 // NewProcessor initializes and returns a Processor, or an error if storageDir
 // is not writable.
-func NewProcessor(storage *Storage, scanInterval int, storageDir string, client *http.Client,
+func NewProcessor(storage *storage.Storage, scanInterval int, storageDir string, client *http.Client,
 	logger *log.Logger) (Processor, error) {
 	// verify we can write to storageDir
 	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
@@ -151,13 +152,13 @@ PROCESSOR_LOOP:
 			for {
 				var keys []string
 				var err error
-				if keys, cursor, err = p.Storage.Redis.Scan(cursor, AggrKeyPrefix+"*", 50).Result(); err != nil {
+				if keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.AggrKeyPrefix+"*", 50).Result(); err != nil {
 					p.Log.Println(fmt.Errorf("Could not scan keys: %v", err))
 					break
 				}
 
 				for _, ag := range keys {
-					aggrID := strings.TrimPrefix(ag, AggrKeyPrefix)
+					aggrID := strings.TrimPrefix(ag, storage.AggrKeyPrefix)
 					if _, ok := p.pools[aggrID]; !ok {
 						aggr, err := p.Storage.GetAggregation(aggrID)
 						if err != nil {
@@ -237,7 +238,7 @@ WORKERPOOL_LOOP:
 		default:
 			job, err := wp.p.Storage.PopJob(&wp.aggr)
 			if err != nil {
-				if _, ok := err.(QueueEmptyError); ok {
+				if _, ok := err.(storage.QueueEmptyError); ok {
 					// No job found, backing off
 					time.Sleep(backoffDuration)
 				} else {

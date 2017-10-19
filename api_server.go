@@ -6,14 +6,15 @@ import (
 	"strconv"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
 type APIServer struct {
 	Server  *http.Server
-	Storage *Storage
+	Storage *storage.Storage
 }
 
-func NewAPIServer(s *Storage, host string, port int) *APIServer {
+func NewAPIServer(s *storage.Storage, host string, port int) *APIServer {
 	as := &APIServer{Storage: s}
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)

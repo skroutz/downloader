@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
 // TODO: rename to MaxRetries when notifier is extracted into its own package
@@ -28,7 +29,7 @@ type callbackInfo struct {
 // and notifying back the respective users by issuing HTTP requests to their
 // provided callback URLs.
 type Notifier struct {
-	Storage *Storage
+	Storage *storage.Storage
 
 	// TODO: These should be exported
 	concurrency int
@@ -39,7 +40,7 @@ type Notifier struct {
 // NewNotifier takes the concurrency of the notifier as an argument
 //
 // TODO: check concurrency is > 0
-func NewNotifier(s *Storage, concurrency int) Notifier {
+func NewNotifier(s *storage.Storage, concurrency int) Notifier {
 	return Notifier{
 		Storage:     s,
 		concurrency: concurrency,
@@ -78,7 +79,7 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 		default:
 			job, err := n.Storage.PopCallback()
 			if err != nil {
-				if _, ok := err.(QueueEmptyError); ok {
+				if _, ok := err.(storage.QueueEmptyError); ok {
 					time.Sleep(time.Second)
 				} else {
 					log.Println(err)

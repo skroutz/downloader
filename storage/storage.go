@@ -1,4 +1,4 @@
-package main
+package storage
 
 import (
 	"fmt"
@@ -43,12 +43,12 @@ type Storage struct {
 	Redis *redis.Client
 }
 
-// NewStorage returns a new Storage that can communicate with Redis. If Redis
+// New returns a new Storage that can communicate with Redis. If Redis
 // is not up an error will be returned.
 //
 // Callers should set right after set AggrKeyPrefix, JobKeyPrefix and
 // CallbackQueue fields on the returned storage.
-func NewStorage(r *redis.Client) (*Storage, error) {
+func New(r *redis.Client) (*Storage, error) {
 	if ping := r.Ping(); ping.Err() != nil || ping.Val() != "PONG" {
 		if ping.Err() != nil {
 			return nil, fmt.Errorf("Could not ping Redis Server successfully: %v", ping.Err())
@@ -68,44 +68,6 @@ func (s *Storage) SaveJob(j *job.Job) error {
 	scmd := s.Redis.HMSet(JobKeyPrefix+j.ID, m)
 	_, err = scmd.Result()
 	return err
-}
-
-func jobFromMap(m map[string]string) (job.Job, error) {
-	var err error
-	j := job.Job{}
-	for k, v := range m {
-		switch k {
-		case "ID":
-			j.ID = v
-		case "URL":
-			j.URL = v
-		case "AggrID":
-			j.AggrID = v
-		case "DownloadState":
-			j.DownloadState = job.State(v)
-		case "DownloadCount":
-			j.DownloadCount, err = strconv.Atoi(v)
-			if err != nil {
-				return j, fmt.Errorf("Could not decode struct from map: %v", err)
-			}
-		case "Meta":
-			j.Meta = v
-		case "CallbackURL":
-			j.CallbackURL = v
-		case "CallbackCount":
-			j.CallbackCount, err = strconv.Atoi(v)
-			if err != nil {
-				return j, fmt.Errorf("Could not decode struct from map: %v", err)
-			}
-		case "CallbackState":
-			j.CallbackState = job.State(v)
-		case "Extra":
-			j.Extra = v
-		default:
-			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
-		}
-	}
-	return j, nil
 }
 
 // GetJob fetches the Job with the given id from Redis.
@@ -233,14 +195,9 @@ func (s *Storage) PopJob(a *job.Aggregation) (job.Job, error) {
 		if cmd.Err().Error() != "redis: nil" {
 			return job.Job{}, fmt.Errorf("Could not pop from redis queue: %s", cmd.Err().Error())
 		}
-		return job.Job{}, QueueEmptyError(redisJobsKey(a))
+		return job.Job{}, QueueEmptyError(JobsKeyPrefix + a.ID)
 	}
 	return s.GetJob(cmd.Val())
-}
-
-// Return the Redis jobs list key
-func redisJobsKey(a *job.Aggregation) string {
-	return JobsKeyPrefix + a.ID
 }
 
 func jobToMap(j *job.Job) (map[string]interface{}, error) {
@@ -264,4 +221,44 @@ func jobToMap(j *job.Job) (map[string]interface{}, error) {
 		out[fi.Name] = v.Field(i).Interface()
 	}
 	return out, nil
+}
+
+// TODO: This is too fragile. Changing the name of a Job field will break this
+// method. Is there a better way?
+func jobFromMap(m map[string]string) (job.Job, error) {
+	var err error
+	j := job.Job{}
+	for k, v := range m {
+		switch k {
+		case "ID":
+			j.ID = v
+		case "URL":
+			j.URL = v
+		case "AggrID":
+			j.AggrID = v
+		case "DownloadState":
+			j.DownloadState = job.State(v)
+		case "DownloadCount":
+			j.DownloadCount, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "Meta":
+			j.Meta = v
+		case "CallbackURL":
+			j.CallbackURL = v
+		case "CallbackCount":
+			j.CallbackCount, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "CallbackState":
+			j.CallbackState = job.State(v)
+		case "Extra":
+			j.Extra = v
+		default:
+			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
+		}
+	}
+	return j, nil
 }

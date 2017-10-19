@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.skroutz.gr/skroutz/downloader/storage"
+
 	"github.com/go-redis/redis"
 	"github.com/urfave/cli"
 )
@@ -52,7 +54,7 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				storage, err := NewStorage(redisClient("api", cfg.Redis.Addr))
+				storage, err := storage.New(redisClient("api", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
@@ -94,7 +96,7 @@ func main() {
 				client := &http.Client{
 					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
 					Timeout:   time.Duration(3) * time.Second}
-				storage, err := NewStorage(redisClient("processor", cfg.Redis.Addr))
+				storage, err := storage.New(redisClient("processor", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
@@ -130,7 +132,7 @@ func main() {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
-				storage, err := NewStorage(redisClient("notifier", cfg.Redis.Addr))
+				storage, err := storage.New(redisClient("notifier", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
