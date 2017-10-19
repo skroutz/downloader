@@ -13,6 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"golang.skroutz.gr/skroutz/downloader/api"
+	"golang.skroutz.gr/skroutz/downloader/notifier"
+	"golang.skroutz.gr/skroutz/downloader/processor"
+	"golang.skroutz.gr/skroutz/downloader/storage"
+
 	"github.com/go-redis/redis"
 	"github.com/urfave/cli"
 )
@@ -52,16 +57,16 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				storage, err := NewStorage(redisClient("api", cfg.Redis.Addr))
+				storage, err := storage.New(redisClient("api", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
-				as := NewAPIServer(storage, c.String("host"), c.Int("port"))
+				api := api.New(storage, c.String("host"), c.Int("port"))
 
 				logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
 				go func() {
-					logger.Println(fmt.Sprintf("Listening on %s...", as.Server.Addr))
-					err := as.Server.ListenAndServe()
+					logger.Println(fmt.Sprintf("Listening on %s...", api.Server.Addr))
+					err := api.Server.ListenAndServe()
 					if err != nil && err != http.ErrServerClosed {
 						logger.Fatal(err)
 					}
@@ -69,7 +74,7 @@ func main() {
 
 				<-sigCh
 				logger.Println("Shutting down gracefully...")
-				err = as.Server.Shutdown(context.TODO())
+				err = api.Server.Shutdown(context.TODO())
 				if err != nil {
 					return err
 				}
@@ -94,12 +99,12 @@ func main() {
 				client := &http.Client{
 					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
 					Timeout:   time.Duration(3) * time.Second}
-				storage, err := NewStorage(redisClient("processor", cfg.Redis.Addr))
+				storage, err := storage.New(redisClient("processor", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
 				logger := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
-				processor, err := NewProcessor(storage, 3, cfg.Processor.StorageDir, client, logger)
+				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, client, logger)
 				if err != nil {
 					return err
 				}
@@ -118,7 +123,8 @@ func main() {
 			Before: parseConfig,
 		},
 		cli.Command{
-			Name: "notifier",
+			Name:  "notifier",
+			Usage: "Start the notifier",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "config, c",
@@ -130,11 +136,11 @@ func main() {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
-				storage, err := NewStorage(redisClient("notifier", cfg.Redis.Addr))
+				storage, err := storage.New(redisClient("notifier", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
-				notifier := NewNotifier(storage, cfg.Notifier.Concurrency)
+				notifier := notifier.New(storage, cfg.Notifier.Concurrency)
 
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan)

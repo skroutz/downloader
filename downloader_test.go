@@ -22,9 +22,9 @@ var (
 
 	wg sync.WaitGroup
 
-	api     http.Client
-	apiHost = "localhost"
-	apiPort = "8123"
+	apiClient http.Client
+	apiHost   = "localhost"
+	apiPort   = "8123"
 
 	// An HTTP file server that serves the contents of testdata/.
 	// Used to test Processor.
@@ -41,7 +41,7 @@ var (
 func TestMain(m *testing.M) {
 	// initialize global variables
 	copy(originalArgs, os.Args)
-	api = http.Client{Timeout: 3 * time.Second}
+	apiClient = http.Client{Timeout: 3 * time.Second}
 	mux := http.NewServeMux()
 	mux.Handle(fileServerPath, http.StripPrefix(fileServerPath,
 		http.FileServer(http.Dir("testdata/"))))
@@ -210,7 +210,7 @@ func postJob(data map[string]string, t *testing.T) {
 	uri := fmt.Sprintf("http://%s:%s/download", apiHost, apiPort)
 
 	v, _ := json.Marshal(data)
-	resp, err := api.Post(uri, "application/json", bytes.NewBuffer(v))
+	resp, err := apiClient.Post(uri, "application/json", bytes.NewBuffer(v))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,8 @@
-package main
+package job
 
-import "errors"
+import (
+	"errors"
+)
 
 // Aggregation is the concept through which the rate limit rules are defined
 // and enforced.

@@ -1,18 +1,21 @@
-package main
+package api
 
 import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+
+	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
-type APIServer struct {
+type API struct {
 	Server  *http.Server
-	Storage *Storage
+	Storage *storage.Storage
 }
 
-func NewAPIServer(s *Storage, host string, port int) *APIServer {
-	as := &APIServer{Storage: s}
+func New(s *storage.Storage, host string, port int) *API {
+	as := &API{Storage: s}
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
@@ -20,13 +23,13 @@ func NewAPIServer(s *Storage, host string, port int) *APIServer {
 }
 
 // ServeHTTP enqueues new downloads to the backend Redis instance
-func (as *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 	decoder := json.NewDecoder(r.Body)
-	j := new(Job)
+	j := new(job.Job)
 	err := decoder.Decode(j)
 	if err != nil {
 		http.Error(w, "Error converting results to json",
@@ -48,7 +51,7 @@ func (as *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: limit should be given from the request instead
-	aggr, err := NewAggregation(j.AggrID, 8)
+	aggr, err := job.NewAggregation(j.AggrID, 8)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}

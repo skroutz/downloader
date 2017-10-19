@@ -1,4 +1,4 @@
-package main
+package job
 
 const (
 	// The available states of a job's DownloadState/CallbackState.
