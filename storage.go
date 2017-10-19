@@ -25,7 +25,7 @@ const (
 	// in the form "<JobsKeyPrefix><aggregation-id>".
 	JobsKeyPrefix = "jobs:"
 
-	// Each Job has a corresponding Redis Hash named in the form of
+	// Each Job has a corresponding Redis Hash named in the form
 	// "<JobKeyPrefix><job-id>"
 	JobKeyPrefix = "job:"
 
