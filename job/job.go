@@ -23,7 +23,8 @@ type Job struct {
 
 	// AggrID is the ID of the aggregation the job belongs to.
 	//
-	// TODO: should this be a pointer to an Aggregation?
+	// TODO: should this be a pointer to an Aggregation? If so, then
+	// NewJob should be a function on Aggregation
 	AggrID string `json:"aggr_id"`
 
 	DownloadState State `json:"-"`

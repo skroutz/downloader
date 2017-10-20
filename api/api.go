@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 
@@ -28,15 +29,19 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	decoder := json.NewDecoder(r.Body)
-	j := new(job.Job)
-	err := decoder.Decode(j)
+
+	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Error converting results to json",
-			http.StatusBadRequest)
+		http.Error(w, "Error reading request body: "+err.Error(), http.StatusBadRequest)
+	}
+	r.Body.Close()
+
+	j := new(job.Job)
+	err = json.Unmarshal(body, j)
+	if err != nil {
+		http.Error(w, "Error parsing request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
 
 	exists, err := as.Storage.JobExists(j)
 	if err != nil {
@@ -50,10 +55,11 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: limit should be given from the request instead
-	aggr, err := job.NewAggregation(j.AggrID, 8)
+	aggr := new(job.Aggregation)
+	err = json.Unmarshal(body, aggr)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Error parsing request: "+err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	exists, err = as.Storage.AggregationExists(aggr)

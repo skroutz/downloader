@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"path"
 	"reflect"
@@ -51,7 +51,6 @@ func TestMain(m *testing.M) {
 		Handler: mux,
 		Addr:    fmt.Sprintf("%s:%s", fileServerHost, fileServerPort)}
 
-	flag.Parse()
 	purgeRedis()
 
 	// start test file server
@@ -113,9 +112,10 @@ func TestFileExists(t *testing.T) {
 	// Test job creation (APIServer)
 	downloadURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fileServerHost, fileServerPort, fileServerPath)
 	callbackURL := fmt.Sprintf("http://%s:%s%s", callbackServerHost, callbackServerPort, callbackServerPath)
-	jobData := map[string]string{
+	jobData := map[string]interface{}{
 		"id":           "999",
 		"aggr_id":      "asemas",
+		"aggr_limit":   1,
 		"url":          downloadURL,
 		"callback_url": callbackURL}
 
@@ -217,7 +217,7 @@ func waitForServer(port string) {
 }
 
 // Creates a Job by executing a request to the API server
-func postJob(data map[string]string, t *testing.T) {
+func postJob(data map[string]interface{}, t *testing.T) {
 	// TODO: get download endpoint from config
 	uri := fmt.Sprintf("http://%s:%s/download", apiHost, apiPort)
 
@@ -229,6 +229,8 @@ func postJob(data map[string]string, t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 201 {
+		info, _ := httputil.DumpResponse(resp, true)
+		log.Println(string(info))
 		t.Fatalf("Expected 201 response, got %d", resp.StatusCode)
 	}
 }
