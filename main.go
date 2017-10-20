@@ -188,5 +188,5 @@ func redisClient(name, addr string) *redis.Client {
 		}
 		return nil
 	}
-	return redis.NewClient(&redis.Options{Addr: addr, OnConnect: setName})
+	return redis.NewClient(&redis.Options{Addr: addr, OnConnect: setName, MaxRetries: 5})
 }
