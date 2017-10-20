@@ -241,14 +241,13 @@ WORKERPOOL_LOOP:
 					if wp.activeWorkers() == 0 {
 						wp.log.Println("Closing due to inactivity...")
 						break WORKERPOOL_LOOP
-					} else {
-						// backoff & wait for workers to finish or a job to be queued
-						time.Sleep(backoffDuration)
 					}
 				} else {
 					wp.log.Println(err)
 				}
 
+				// backoff & wait for workers to finish or a job to be queued
+				time.Sleep(backoffDuration)
 				continue
 			}
 			if wp.activeWorkers() < wp.aggr.Limit {
