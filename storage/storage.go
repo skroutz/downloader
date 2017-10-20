@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
+	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
 
@@ -32,11 +34,51 @@ const (
 	CallbackQueue = "CallbackQueue"
 )
 
-type QueueEmptyError string
+var (
+	// Atomically pop jobs from a sorted set (ZSET)
+	// Each job has a score that points to the time
+	// it should be executed.
+	//
+	// We only pop jobs that are "ready" to execute,
+	// so we can implement backoffs by scheduling jobs
+	// in the future.
+	//
+	// Note that we return two different kind of errors,
+	// ERROR & RETRYLATER. We need that in order decide
+	// if we should close the worker pool.
+	//
+	// Both operations are 0(1) since we operate on the
+	// left side of an ordered list.
+	zpop = redis.NewScript(`
+		local key = KEYS[1]
+		local max_score = ARGV[1]
 
-func (err QueueEmptyError) Error() string {
-	return fmt.Sprintf("Queue %s is empty", err)
-}
+		-- Get the Job with the smallest score
+		local top = redis.call("zrange", key, 0, 0, 'withscores')
+
+		-- Empty ZSET
+		if #top == 0 then
+		return redis.error_reply("EMPTY")
+		end
+
+		local job = top[1]
+		local score = top[2]
+
+		-- Job is not ready yet
+		if score > max_score then
+		return redis.error_reply("RETRYLATER")
+		end
+
+		-- We have a Job!
+		redis.call("zremrangebyrank", key, 0, 0)
+		return job
+		`)
+
+	// ErrEmptyQueue is returned by ZPOP when there is no job in the queue
+	ErrEmptyQueue = errors.New("Queue is empty")
+	// ErrRetryLater is returned by ZPOP when there are only future jobs in the queue
+	ErrRetryLater = errors.New("Retry again later")
+)
 
 type Storage struct {
 	Redis *redis.Client
@@ -105,7 +147,12 @@ func (s *Storage) QueuePendingDownload(j *job.Job) error {
 	if err != nil {
 		return err
 	}
-	return s.Redis.RPush(JobsKeyPrefix+j.AggrID, j.ID).Err()
+
+	z := redis.Z{
+		Member: j.ID,
+		Score:  float64(time.Now().Unix()),
+	}
+	return s.Redis.ZAdd(JobsKeyPrefix+j.AggrID, z).Err()
 }
 
 // QueuePendingCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
@@ -115,7 +162,12 @@ func (s *Storage) QueuePendingCallback(j *job.Job) error {
 	if err != nil {
 		return err
 	}
-	return s.Redis.RPush(CallbackQueue, j.ID).Err()
+
+	z := redis.Z{
+		Member: j.ID,
+		Score:  float64(time.Now().Unix()),
+	}
+	return s.Redis.ZAdd(CallbackQueue, z).Err()
 }
 
 // PopCallback attempts to pop a Job from the callback queue.
@@ -231,15 +283,20 @@ func (s *Storage) exists(key string) (bool, error) {
 	return res > 0, err
 }
 
-// LPOPs from list and returns the corresponding job
+// POPs from list and returns the corresponding job
 func (s *Storage) pop(list string) (job.Job, error) {
-	val, err := s.Redis.LPop(list).Result()
+	val, err := zpop.Run(s.Redis, []string{list}, time.Now().Unix()).Result()
+
 	if err != nil {
-		// TODO: there must be a better way to do this
-		if err.Error() != "redis: nil" {
-			return job.Job{}, fmt.Errorf("Could not pop from redis queue: %s", err.Error())
+		switch err.Error() {
+		case "EMPTY":
+			return job.Job{}, ErrEmptyQueue
+		case "RETRYLATER":
+			return job.Job{}, ErrRetryLater
+		default:
+			return job.Job{}, fmt.Errorf("Could not zpop: %s", err)
 		}
-		return job.Job{}, QueueEmptyError(list)
 	}
-	return s.GetJob(val)
+
+	return s.GetJob(val.(string))
 }
