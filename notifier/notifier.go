@@ -16,8 +16,8 @@ import (
 
 const maxCallbackRetries = 2
 
-// callbackInfo holds the info to be posted back to the provided callback url of the caller
-type callbackInfo struct {
+// CallbackInfo holds info to be posted back to the provided callback url.
+type CallbackInfo struct {
 	Success     bool   `json:"success"`
 	Error       string `json:"error"`
 	Extra       string `json:"extra"`
@@ -133,12 +133,12 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 
 // callbackInfo validates that the job is good for callback and
 // return callbackInfo to the caller
-func getCallbackInfo(j *job.Job) (callbackInfo, error) {
+func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 	if j.DownloadState != job.StateSuccess && j.DownloadState != job.StateFailed {
-		return callbackInfo{}, fmt.Errorf("Invalid Job State %s", j.DownloadState)
+		return CallbackInfo{}, fmt.Errorf("Invalid Job State %s", j.DownloadState)
 	}
 
-	return callbackInfo{
+	return CallbackInfo{
 		Success:     j.DownloadState == job.StateSuccess,
 		Error:       j.Meta,
 		Extra:       j.Extra,
