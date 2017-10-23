@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
 
@@ -114,24 +113,6 @@ func (s *Storage) QueuePendingCallback(j *job.Job) error {
 	return s.Redis.RPush(CallbackQueue, j.ID).Err()
 }
 
-// UpdateDownloadState changes the current Job state to the provided value and reports any errors
-//
-// TODO: Move this to notifier or processor.
-func (s *Storage) UpdateDownloadState(j *job.Job, state job.State, meta ...string) error {
-	j.DownloadState = state
-	j.Meta = strings.Join(meta, "\n")
-	return s.SaveJob(j)
-}
-
-// UpdateCallbackState changes the current Job state to the provided value and reports any errors
-//
-// TODO: Move this to notifier or processor
-func (s *Storage) UpdateCallbackState(j *job.Job, state job.State, meta ...string) error {
-	j.CallbackState = state
-	j.Meta = strings.Join(meta, "\n")
-	return s.SaveJob(j)
-}
-
 // PopCallback attempts to pop a Job from the callback queue.
 // If it succeeds the job with the popped ID is returned.
 func (s *Storage) PopCallback() (job.Job, error) {
@@ -217,8 +198,8 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			if err != nil {
 				return j, fmt.Errorf("Could not decode struct from map: %v", err)
 			}
-		case "Meta":
-			j.Meta = v
+		case "DownloadMeta":
+			j.DownloadMeta = v
 		case "CallbackURL":
 			j.CallbackURL = v
 		case "CallbackCount":
@@ -228,6 +209,8 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			}
 		case "CallbackState":
 			j.CallbackState = job.State(v)
+		case "CallbackMeta":
+			j.CallbackMeta = v
 		case "Extra":
 			j.Extra = v
 		default:

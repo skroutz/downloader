@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"path"
 	"reflect"
@@ -130,7 +131,37 @@ func TestResourceExists(t *testing.T) {
 
 	postJob(jobData, t)
 
+	// Test callback mechanism (Notifier)
+	var parsedCB notifier.CallbackInfo
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-cbChan:
+		err = json.Unmarshal(cb, &parsedCB)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if parsedCB.Success != true {
+			t.Fatalf("Expected Success to be true: %#v", parsedCB)
+		}
+		if parsedCB.Error != "" {
+			t.Fatalf("Expected Error to be empty: %#v", parsedCB)
+		}
+		if parsedCB.Extra != "" {
+			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
+		}
+		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
+			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
+				parsedCB)
+		}
+	}
+
 	// Test job processing (Processor)
+	downloadURI, err := url.Parse(parsedCB.DownloadURL)
+	if err != nil {
+		t.Fatal(err)
+	}
 	served, err = os.Open("testdata/sample-1.jpg")
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +177,7 @@ FILECHECK:
 		case <-time.After(3 * time.Second):
 			t.Fatal("File not present on the download location after 5 seconds")
 		default:
-			filePath := path.Join(cfg.Processor.StorageDir, "999")
+			filePath := path.Join(cfg.Processor.StorageDir, downloadURI.Path)
 			downloaded, err = os.Open(filePath)
 			if err == nil {
 				downloadedFileStat, err := downloaded.Stat()
@@ -182,32 +213,6 @@ FILECHECK:
 	if !reflect.DeepEqual(actual, expected) {
 		t.Error("Expected downloaded and served files to be equal")
 	}
-
-	// Test callback mechanism (Notifier)
-	var parsedCB notifier.CallbackInfo
-
-	select {
-	case <-time.After(5 * time.Second):
-		t.Fatal("Callback request receive timeout")
-	case cb := <-cbChan:
-		err = json.Unmarshal(cb, &parsedCB)
-		if err != nil {
-			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
-		}
-		if parsedCB.Success != true {
-			t.Fatalf("Expected Success to be true: %#v", parsedCB)
-		}
-		if parsedCB.Error != "" {
-			t.Fatalf("Expected Error to be empty: %#v", parsedCB)
-		}
-		if parsedCB.Extra != "" {
-			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
-		}
-		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
-			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
-				parsedCB)
-		}
-	}
 }
 
 func TestResourceDontExist(t *testing.T) {
@@ -231,7 +236,6 @@ func TestResourceDontExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
-		// Success:false, Error:"", Extra:"", DownloadURL:"http://localhost/wCNMXVXROtz2EQ"}
 		if parsedCB.Success != false {
 			t.Fatal("Expected Success to be false")
 		}

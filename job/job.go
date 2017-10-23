@@ -33,11 +33,14 @@ type Job struct {
 	DownloadCount int `json:"-"`
 
 	// Auxiliary ad-hoc information. Typically used for communicating
-	// errors back to the user.
-	Meta string `json:"-"`
+	// download errors back to the user.
+	DownloadMeta string `json:"-"`
 
 	CallbackState State  `json:"-"`
 	CallbackURL   string `json:"callback_url"`
+
+	// Auxiliary ad-hoc information used for debugging.
+	CallbackMeta string `json:"-"`
 
 	// How many times the callback request was attempted
 	CallbackCount int `json:"-"`
