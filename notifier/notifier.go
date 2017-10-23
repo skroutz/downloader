@@ -93,16 +93,17 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 // Notify posts callback info to the Job's CallbackURL
 // using the provided http.Client
 func (n *Notifier) Notify(j *job.Job) {
-	n.Storage.UpdateCallbackState(j, job.StateInProgress)
+	n.Storage.UpdateCallbackState(j, job.StateInProgress, j.Meta)
+
 	cbInfo, err := getCallbackInfo(j)
 	if err != nil {
-		n.Storage.UpdateDownloadState(j, job.StateFailed, err.Error())
+		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
 		return
 	}
 
 	cb, err := json.Marshal(cbInfo)
 	if err != nil {
-		n.Storage.UpdateDownloadState(j, job.StateFailed, err.Error())
+		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
 		return
 	}
 
@@ -115,7 +116,7 @@ func (n *Notifier) Notify(j *job.Job) {
 		return
 	}
 
-	n.Storage.UpdateCallbackState(j, job.StateSuccess)
+	n.Storage.UpdateCallbackState(j, job.StateSuccess, j.Meta)
 }
 
 // retryOrFail checks the callback count of the current download

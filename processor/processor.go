@@ -332,7 +332,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	if resp.StatusCode >= http.StatusInternalServerError {
 		wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		return
-	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
+	} else if resp.StatusCode >= http.StatusBadRequest {
 		err = wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("Received status code %d", resp.StatusCode))
 		if err != nil {
 			wp.log.Println(err)

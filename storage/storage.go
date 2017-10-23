@@ -115,6 +115,8 @@ func (s *Storage) QueuePendingCallback(j *job.Job) error {
 }
 
 // UpdateDownloadState changes the current Job state to the provided value and reports any errors
+//
+// TODO: Move this to notifier or processor.
 func (s *Storage) UpdateDownloadState(j *job.Job, state job.State, meta ...string) error {
 	j.DownloadState = state
 	j.Meta = strings.Join(meta, "\n")
@@ -122,6 +124,8 @@ func (s *Storage) UpdateDownloadState(j *job.Job, state job.State, meta ...strin
 }
 
 // UpdateCallbackState changes the current Job state to the provided value and reports any errors
+//
+// TODO: Move this to notifier or processor
 func (s *Storage) UpdateCallbackState(j *job.Job, state job.State, meta ...string) error {
 	j.CallbackState = state
 	j.Meta = strings.Join(meta, "\n")
