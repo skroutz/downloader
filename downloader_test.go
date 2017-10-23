@@ -78,7 +78,9 @@ func TestMain(m *testing.M) {
 	wg.Add(1)
 	go start("notifier")
 
+	mu.Lock()
 	result := m.Run()
+	mu.Unlock()
 
 	// shutdown test file server
 	err := fileServer.Shutdown(context.TODO())
@@ -91,6 +93,7 @@ func TestMain(m *testing.M) {
 	sigCh <- os.Interrupt // shutdown Notifier
 
 	wg.Wait()
+	purgeRedis()
 	os.Exit(result)
 }
 
@@ -183,7 +186,7 @@ FILECHECK:
 	}
 
 	select {
-	case <-time.After(3 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("Callback request receive timeout")
 	case cb := <-cbChan:
 		err = json.Unmarshal(cb, &parsedCB)
