@@ -142,7 +142,7 @@ func TestResourceExists(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
-		if parsedCB.Success != true {
+		if !parsedCB.Success {
 			t.Fatalf("Expected Success to be true: %#v", parsedCB)
 		}
 		if parsedCB.Error != "" {
@@ -236,7 +236,7 @@ func TestResourceDontExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
-		if parsedCB.Success != false {
+		if parsedCB.Success {
 			t.Fatal("Expected Success to be false")
 		}
 		if !strings.HasSuffix(parsedCB.Error, "404") {

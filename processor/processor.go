@@ -308,7 +308,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
-		wp.requeueOrFail(j, fmt.Sprintf("Could not create request, %v", err))
+		wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
 		return
 	}
 

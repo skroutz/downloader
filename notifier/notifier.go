@@ -122,8 +122,6 @@ func (n *Notifier) Notify(j *job.Job) {
 // retryOrFail checks the callback count of the current download
 // and retries the callback if its Retry Counts < maxRetries else it marks
 // it as failed
-//
-// TODO: isn't used anywhere. Why?
 func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
 		return n.markCbFailed(j, err)
