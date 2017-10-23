@@ -112,7 +112,7 @@ func (n *Notifier) Notify(j *job.Job) {
 		if err == nil {
 			err = fmt.Errorf("Received Status: %s", res.Status)
 		}
-		n.markCbFailed(j, err.Error())
+		n.retryOrFail(j, err.Error())
 		return
 	}
 
