@@ -16,7 +16,7 @@ const (
 // TODO: should this be valid with an empty aggregation id?
 type Job struct {
 	// Auto-generated
-	ID string `json:"id"`
+	ID string `json:"-"`
 
 	// The URL pointing to the resource to be downloaded
 	URL string `json:"url"`

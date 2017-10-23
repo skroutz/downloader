@@ -1,10 +1,13 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"strconv"
+	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
 	"golang.skroutz.gr/skroutz/downloader/storage"
@@ -13,6 +16,14 @@ import (
 type API struct {
 	Server  *http.Server
 	Storage *storage.Storage
+}
+
+var idgen *rng
+
+func init() {
+	idgen = newRNG(10,
+		rand.NewSource(time.Now().UnixNano()),
+		base64.RawURLEncoding)
 }
 
 func New(s *storage.Storage, host string, port int) *API {
@@ -43,15 +54,22 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exists, err := as.Storage.JobExists(j)
-	if err != nil {
-		http.Error(w, "Error queuing download: "+err.Error(),
-			http.StatusInternalServerError)
-		return
+	foundJID := false
+	for i := 0; i < 3; i++ {
+		j.ID = idgen.rand()
+		exists, err := as.Storage.JobExists(j)
+		if err != nil {
+			http.Error(w, "Error queuing download: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !exists {
+			foundJID = true
+			break
+		}
 	}
-	if exists {
-		http.Error(w, "Job with provided id already exists",
-			http.StatusBadRequest)
+	if !foundJID {
+		http.Error(w, "Could not find unique ID after 3 tries. ID: "+j.ID,
+			http.StatusInternalServerError)
 		return
 	}
 
@@ -62,7 +80,8 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exists, err = as.Storage.AggregationExists(aggr)
+	// TODO: do we want to throw error or override the previous aggr?
+	exists, err := as.Storage.AggregationExists(aggr)
 	if err != nil {
 		http.Error(w, "Error queuing download: "+err.Error(),
 			http.StatusInternalServerError)

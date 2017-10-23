@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -43,7 +44,7 @@ var (
 func TestMain(m *testing.M) {
 	// initialize global variables
 	copy(originalArgs, os.Args)
-	apiClient = http.Client{Timeout: 3 * time.Second}
+	apiClient = http.Client{Timeout: 5 * time.Second}
 	mux := http.NewServeMux()
 	mux.Handle(fileServerPath, http.StripPrefix(fileServerPath,
 		http.FileServer(http.Dir("testdata/"))))
@@ -113,7 +114,6 @@ func TestFileExists(t *testing.T) {
 	downloadURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fileServerHost, fileServerPort, fileServerPath)
 	callbackURL := fmt.Sprintf("http://%s:%s%s", callbackServerHost, callbackServerPort, callbackServerPath)
 	jobData := map[string]interface{}{
-		"id":           "999",
 		"aggr_id":      "asemas",
 		"aggr_limit":   1,
 		"url":          downloadURL,
@@ -175,14 +175,33 @@ FILECHECK:
 	}
 
 	// Test callback mechanism (Notifier)
-	expectedCallback := `{"success":true,"error":"","extra":"","download_url":"http://localhost/999"}`
+	var parsedCB struct {
+		Success     bool
+		Error       string
+		Extra       string
+		DownloadURL string `json:"download_url"`
+	}
+
 	select {
 	case <-time.After(3 * time.Second):
 		t.Fatal("Callback request receive timeout")
 	case cb := <-cbChan:
-		actualCallback := string(cb)
-		if expectedCallback != actualCallback {
-			t.Fatalf("Expected callback %s, got %s", expectedCallback, actualCallback)
+		err = json.Unmarshal(cb, &parsedCB)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if parsedCB.Success != true {
+			t.Fatal("Expected Success to be true: %#v", parsedCB)
+		}
+		if parsedCB.Error != "" {
+			t.Fatal("Expected Error to be empty: %#v", parsedCB)
+		}
+		if parsedCB.Extra != "" {
+			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
+		}
+		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
+			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
+				parsedCB)
 		}
 	}
 
