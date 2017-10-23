@@ -312,6 +312,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		return
 	}
 
+	j.DownloadCount++
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
@@ -374,7 +375,6 @@ func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 		}
 		return wp.p.Storage.QueuePendingCallback(j)
 	}
-	j.DownloadCount++
 	return wp.p.Storage.QueuePendingDownload(j)
 }
 
