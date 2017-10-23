@@ -16,8 +16,8 @@ import (
 
 const maxCallbackRetries = 2
 
-// callbackInfo holds the info to be posted back to the provided callback url of the caller
-type callbackInfo struct {
+// CallbackInfo holds info to be posted back to the provided callback url.
+type CallbackInfo struct {
 	Success     bool   `json:"success"`
 	Error       string `json:"error"`
 	Extra       string `json:"extra"`
@@ -90,19 +90,19 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 	}
 }
 
-// Notify posts callback info to the Job's CallbackURL
-// using the provided http.Client
+// Notify posts callback info to j.CallbackURL
 func (n *Notifier) Notify(j *job.Job) {
-	n.Storage.UpdateCallbackState(j, job.StateInProgress)
+	n.Storage.UpdateCallbackState(j, job.StateInProgress, j.Meta)
+
 	cbInfo, err := getCallbackInfo(j)
 	if err != nil {
-		n.Storage.UpdateDownloadState(j, job.StateFailed, err.Error())
+		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
 		return
 	}
 
 	cb, err := json.Marshal(cbInfo)
 	if err != nil {
-		n.Storage.UpdateDownloadState(j, job.StateFailed, err.Error())
+		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
 		return
 	}
 
@@ -115,7 +115,7 @@ func (n *Notifier) Notify(j *job.Job) {
 		return
 	}
 
-	n.Storage.UpdateCallbackState(j, job.StateSuccess)
+	n.Storage.UpdateCallbackState(j, job.StateSuccess, j.Meta)
 }
 
 // retryOrFail checks the callback count of the current download
@@ -133,12 +133,12 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 
 // callbackInfo validates that the job is good for callback and
 // return callbackInfo to the caller
-func getCallbackInfo(j *job.Job) (callbackInfo, error) {
+func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 	if j.DownloadState != job.StateSuccess && j.DownloadState != job.StateFailed {
-		return callbackInfo{}, fmt.Errorf("Invalid Job State %s", j.DownloadState)
+		return CallbackInfo{}, fmt.Errorf("Invalid Job State %s", j.DownloadState)
 	}
 
-	return callbackInfo{
+	return CallbackInfo{
 		Success:     j.DownloadState == job.StateSuccess,
 		Error:       j.Meta,
 		Extra:       j.Extra,
