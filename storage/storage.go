@@ -298,5 +298,11 @@ func (s *Storage) pop(list string) (job.Job, error) {
 		}
 	}
 
-	return s.GetJob(val.(string))
+	// ZPOP should always return a string
+	jobID, ok := val.(string)
+	if !ok {
+		panic(fmt.Sprintf("zpop replied with '%#v', it should be a string!", val))
+	}
+
+	return s.GetJob(jobID)
 }
