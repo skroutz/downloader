@@ -315,13 +315,16 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("TLS Error occured, %v", err))
+			err = wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("TLS Error occured: %s", err))
 			if err != nil {
 				wp.log.Println(err)
 			}
+			err = wp.p.Storage.QueuePendingCallback(j)
+			if err != nil {
+				wp.log.Printf("Failed scheduling callback: %s", err)
+			}
 			return
 		}
-
 		wp.requeueOrFail(j, err.Error())
 		return
 	}
@@ -330,7 +333,14 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-		wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("Received Status Code %d", resp.StatusCode))
+		err = wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("Received status code %d", resp.StatusCode))
+		if err != nil {
+			wp.log.Println(err)
+		}
+		err = wp.p.Storage.QueuePendingCallback(j)
+		if err != nil {
+			wp.log.Printf("Failed scheduling callback: %s", err)
+		}
 		return
 	}
 	defer resp.Body.Close()
@@ -341,22 +351,28 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		return
 	}
 
-	if err = wp.p.Storage.UpdateDownloadState(j, job.StateSuccess); err != nil {
+	err = wp.p.Storage.UpdateDownloadState(j, job.StateSuccess)
+	if err != nil {
 		wp.log.Println(err)
 		return
 	}
 
-	if err = wp.p.Storage.QueuePendingCallback(j); err != nil {
-		wp.log.Println(err)
+	err = wp.p.Storage.QueuePendingCallback(j)
+	if err != nil {
+		wp.log.Printf("Failed scheduling callback: %s", err)
 	}
 }
 
 // requeueOrFail checks the retry count of the current download
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
-func (wp *workerPool) requeueOrFail(j *job.Job, err string) error {
+func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 	if j.DownloadCount >= maxDownloadRetries {
-		return wp.p.Storage.UpdateDownloadState(j, job.StateFailed, err)
+		err := wp.p.Storage.UpdateDownloadState(j, job.StateFailed, meta)
+		if err != nil {
+			return err
+		}
+		return wp.p.Storage.QueuePendingCallback(j)
 	}
 	j.DownloadCount++
 	return wp.p.Storage.QueuePendingDownload(j)
