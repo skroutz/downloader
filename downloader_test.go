@@ -34,30 +34,27 @@ var (
 
 	// An HTTP file server that serves the contents of testdata/.
 	// Used to test Processor.
-	fileServer     *http.Server
-	fileServerHost = "localhost"
-	fileServerPort = "9718"
-	fileServerPath = "/testdata/"
+	fsHost     = "localhost"
+	fsPort     = "9718"
+	fsPath     = "/testdata/"
+	fsChan     = make(chan int, 10)
+	fileServer = newFileServer(fmt.Sprintf("%s:%s", fsHost, fsPort), fsChan)
 
-	callbackServerHost = "localhost"
-	callbackServerPort = "9894"
-	callbackServerPath = "/callback/"
-	cbChan             = make(chan []byte)
-	cbServer           = newCallbackServer(fmt.Sprintf("%s:%s", callbackServerHost, callbackServerPort), cbChan)
+	csHost   = "localhost"
+	csPort   = "9894"
+	csPath   = "/callback/"
+	csChan   = make(chan []byte)
+	cbServer = newCallbackServer(fmt.Sprintf("%s:%s", csHost, csPort), csChan)
+
+	timeout = 5 * time.Second
 )
 
 func TestMain(m *testing.M) {
 	// initialize global variables
 	copy(originalArgs, os.Args)
-	apiClient = http.Client{Timeout: 5 * time.Second}
-	mux := http.NewServeMux()
-	mux.Handle(fileServerPath, http.StripPrefix(fileServerPath,
-		http.FileServer(http.Dir("testdata/"))))
-	fileServer = &http.Server{
-		Handler: mux,
-		Addr:    fmt.Sprintf("%s:%s", fileServerHost, fileServerPort)}
+	apiClient = http.Client{Timeout: timeout}
 
-	purgeRedis()
+	flushRedis()
 
 	// start test file server
 	wg.Add(1)
@@ -68,7 +65,7 @@ func TestMain(m *testing.M) {
 			log.Fatal(err)
 		}
 	}()
-	waitForServer(fileServerPort)
+	waitForServer(fsPort)
 
 	// start test callback server
 	go func() {
@@ -77,7 +74,7 @@ func TestMain(m *testing.M) {
 			log.Fatal(err)
 		}
 	}()
-	waitForServer(callbackServerPort)
+	waitForServer(csPort)
 
 	// start API server, Processor & Notifier
 	wg.Add(1)
@@ -111,7 +108,7 @@ func TestMain(m *testing.M) {
 	sigCh <- os.Interrupt // shutdown Notifier
 
 	wg.Wait()
-	purgeRedis()
+	//purgeRedis()
 	os.Exit(result)
 }
 
@@ -121,8 +118,8 @@ func TestResourceExists(t *testing.T) {
 	var err error
 
 	// Test job creation (APIServer)
-	downloadURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fileServerHost, fileServerPort, fileServerPath)
-	callbackURL := fmt.Sprintf("http://%s:%s%s", callbackServerHost, callbackServerPort, callbackServerPath)
+	downloadURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fsHost, fsPort, fsPath)
+	callbackURL := fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)
 	jobData := map[string]interface{}{
 		"aggr_id":      "asemas",
 		"aggr_limit":   1,
@@ -135,9 +132,9 @@ func TestResourceExists(t *testing.T) {
 	var parsedCB notifier.CallbackInfo
 
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(timeout):
 		t.Fatal("Callback request receive timeout")
-	case cb := <-cbChan:
+	case cb := <-csChan:
 		err = json.Unmarshal(cb, &parsedCB)
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
@@ -174,7 +171,7 @@ func TestResourceExists(t *testing.T) {
 FILECHECK:
 	for {
 		select {
-		case <-time.After(3 * time.Second):
+		case <-time.After(timeout):
 			t.Fatal("File not present on the download location after 5 seconds")
 		default:
 			filePath := path.Join(cfg.Processor.StorageDir, downloadURI.Path)
@@ -218,20 +215,18 @@ FILECHECK:
 func TestResourceDontExist(t *testing.T) {
 	var parsedCB notifier.CallbackInfo
 
-	downloadURL := fmt.Sprintf("http://%s:%s%si-dont-exist.foo", fileServerHost, fileServerPort, fileServerPath)
-	callbackURL := fmt.Sprintf("http://%s:%s%s", callbackServerHost, callbackServerPort, callbackServerPath)
-	jobData := map[string]interface{}{
+	job := map[string]interface{}{
 		"aggr_id":      "foobar",
 		"aggr_limit":   1,
-		"url":          downloadURL,
-		"callback_url": callbackURL}
+		"url":          fmt.Sprintf("http://%s:%s%si-dont-exist.foo", fsHost, fsPort, fsPath),
+		"callback_url": fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)}
 
-	postJob(jobData, t)
+	postJob(job, t)
 
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(timeout):
 		t.Fatal("Callback request receive timeout")
-	case cb := <-cbChan:
+	case cb := <-csChan:
 		err := json.Unmarshal(cb, &parsedCB)
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
@@ -241,6 +236,47 @@ func TestResourceDontExist(t *testing.T) {
 		}
 		if !strings.HasSuffix(parsedCB.Error, "404") {
 			t.Fatalf("Expected Error to end with '404': %s", parsedCB.Error)
+		}
+		if parsedCB.Extra != "" {
+			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
+		}
+		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
+			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
+				parsedCB)
+		}
+	}
+}
+
+// test a download URL that will fail the first 2 times but succeeds the 3rd
+func TestTransientDownstreamError(t *testing.T) {
+	var parsedCB notifier.CallbackInfo
+
+	job := map[string]interface{}{
+		"aggr_id":      "murphy",
+		"aggr_limit":   1,
+		"url":          fmt.Sprintf("http://%s:%s%ssample-1.jpg", fsHost, fsPort, fsPath),
+		"callback_url": fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)}
+
+	fsChan <- http.StatusInternalServerError // 1st try
+	fsChan <- http.StatusServiceUnavailable  // 2nd try
+	// 3rd try will succeed
+
+	postJob(job, t)
+
+	select {
+	// bump timeout cause we also have to wait for the backoffs
+	case <-time.After(timeout + (5 * time.Second)):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-csChan:
+		err := json.Unmarshal(cb, &parsedCB)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if !parsedCB.Success {
+			t.Fatal("Expected Success to be true")
+		}
+		if parsedCB.Error != "" {
+			t.Fatalf("Expected Error to be empty", parsedCB.Error)
 		}
 		if parsedCB.Extra != "" {
 			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
@@ -294,6 +330,28 @@ func postJob(data map[string]interface{}, t *testing.T) {
 	}
 }
 
+func newFileServer(addr string, ch chan int) *http.Server {
+	mux := http.NewServeMux()
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextRespCode := -1
+
+		select {
+		case nextRespCode = <-ch:
+		default:
+		}
+
+		if nextRespCode == -1 {
+			http.FileServer(http.Dir("testdata/")).ServeHTTP(w, r)
+		} else {
+			w.WriteHeader(nextRespCode)
+		}
+	})
+
+	mux.Handle(fsPath, http.StripPrefix(fsPath, h))
+	return &http.Server{Handler: mux, Addr: addr}
+}
+
 // a test callback server used to test the Notifier. When it receives a request,
 // it emits it back to ch.
 func newCallbackServer(addr string, ch chan []byte) *http.Server {
@@ -306,19 +364,19 @@ func newCallbackServer(addr string, ch chan []byte) *http.Server {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(callbackServerPath, handler)
+	mux.HandleFunc(csPath, handler)
 
 	return &http.Server{
 		Handler:           mux,
 		Addr:              addr,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
-		ReadHeaderTimeout: 3 * time.Second,
+		ReadTimeout:       timeout,
+		WriteTimeout:      timeout,
+		ReadHeaderTimeout: timeout,
 	}
 }
 
 // TODO: should read addr from config
-func purgeRedis() {
+func flushRedis() {
 	err := redisClient("test", "localhost:6379").FlushDB().Err()
 	if err != nil {
 		log.Fatal(err)
