@@ -298,7 +298,7 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 // perform downloads the resource denoted by j.URL and updates its state in
 // Redis accordingly. It may retry downloading on certain errors.
 func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
-	wp.p.Storage.UpdateDownloadState(j, job.StateInProgress)
+	wp.markJobInProgress(j)
 	out, err := os.Create(wp.p.StorageDir + j.ID)
 	if err != nil {
 		wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
@@ -315,7 +315,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("TLS Error occured: %s", err))
+			err = wp.markJobFailed(j, fmt.Sprintf("TLS Error occured: %s", err))
 			if err != nil {
 				wp.log.Println(err)
 			}
@@ -333,7 +333,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest {
-		err = wp.p.Storage.UpdateDownloadState(j, job.StateFailed, fmt.Sprintf("Received status code %d", resp.StatusCode))
+		err = wp.markJobFailed(j, fmt.Sprintf("Received status code %d", resp.StatusCode))
 		if err != nil {
 			wp.log.Println(err)
 		}
@@ -351,7 +351,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		return
 	}
 
-	err = wp.p.Storage.UpdateDownloadState(j, job.StateSuccess)
+	err = wp.markJobSuccess(j)
 	if err != nil {
 		wp.log.Println(err)
 		return
@@ -368,7 +368,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 // it as failed
 func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 	if j.DownloadCount >= maxDownloadRetries {
-		err := wp.p.Storage.UpdateDownloadState(j, job.StateFailed, meta)
+		err := wp.markJobFailed(j, meta)
 		if err != nil {
 			return err
 		}
@@ -376,4 +376,22 @@ func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 	}
 	j.DownloadCount++
 	return wp.p.Storage.QueuePendingDownload(j)
+}
+
+func (wp *workerPool) markJobInProgress(j *job.Job) error {
+	j.DownloadState = job.StateInProgress
+	j.DownloadMeta = ""
+	return wp.p.Storage.SaveJob(j)
+}
+
+func (wp *workerPool) markJobSuccess(j *job.Job) error {
+	j.DownloadState = job.StateSuccess
+	j.DownloadMeta = ""
+	return wp.p.Storage.SaveJob(j)
+}
+
+func (wp *workerPool) markJobFailed(j *job.Job, meta ...string) error {
+	j.DownloadState = job.StateFailed
+	j.DownloadMeta = strings.Join(meta, "\n")
+	return wp.p.Storage.SaveJob(j)
 }

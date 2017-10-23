@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -92,17 +93,17 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 
 // Notify posts callback info to j.CallbackURL
 func (n *Notifier) Notify(j *job.Job) {
-	n.Storage.UpdateCallbackState(j, job.StateInProgress, j.Meta)
+	n.markCbInProgress(j)
 
 	cbInfo, err := getCallbackInfo(j)
 	if err != nil {
-		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
+		n.markCbFailed(j, err.Error())
 		return
 	}
 
 	cb, err := json.Marshal(cbInfo)
 	if err != nil {
-		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
+		n.markCbFailed(j, err.Error())
 		return
 	}
 
@@ -111,11 +112,11 @@ func (n *Notifier) Notify(j *job.Job) {
 		if err == nil {
 			err = fmt.Errorf("Received Status: %s", res.Status)
 		}
-		n.Storage.UpdateCallbackState(j, job.StateFailed, err.Error())
+		n.markCbFailed(j, err.Error())
 		return
 	}
 
-	n.Storage.UpdateCallbackState(j, job.StateSuccess, j.Meta)
+	n.markCbSuccess(j)
 }
 
 // retryOrFail checks the callback count of the current download
@@ -125,7 +126,7 @@ func (n *Notifier) Notify(j *job.Job) {
 // TODO: isn't used anywhere. Why?
 func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
-		return n.Storage.UpdateCallbackState(j, job.StateFailed, err)
+		return n.markCbFailed(j, err)
 	}
 	j.CallbackCount++
 	return n.Storage.QueuePendingCallback(j)
@@ -140,7 +141,7 @@ func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 
 	return CallbackInfo{
 		Success:     j.DownloadState == job.StateSuccess,
-		Error:       j.Meta,
+		Error:       j.DownloadMeta,
 		Extra:       j.Extra,
 		DownloadURL: jobDownloadURL(j),
 	}, nil
@@ -151,4 +152,22 @@ func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 // TODO: Actually make it smart
 func jobDownloadURL(j *job.Job) string {
 	return fmt.Sprintf("http://localhost/%s", j.ID)
+}
+
+func (n *Notifier) markCbInProgress(j *job.Job) error {
+	j.CallbackState = job.StateInProgress
+	j.CallbackMeta = ""
+	return n.Storage.SaveJob(j)
+}
+
+func (n *Notifier) markCbSuccess(j *job.Job) error {
+	j.CallbackState = job.StateSuccess
+	j.CallbackMeta = ""
+	return n.Storage.SaveJob(j)
+}
+
+func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
+	j.CallbackState = job.StateFailed
+	j.CallbackMeta = strings.Join(meta, "\n")
+	return n.Storage.SaveJob(j)
 }

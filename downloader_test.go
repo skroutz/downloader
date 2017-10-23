@@ -231,7 +231,6 @@ func TestResourceDontExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
-		// Success:false, Error:"", Extra:"", DownloadURL:"http://localhost/wCNMXVXROtz2EQ"}
 		if parsedCB.Success != false {
 			t.Fatal("Expected Success to be false")
 		}
