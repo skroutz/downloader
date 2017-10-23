@@ -17,6 +17,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.skroutz.gr/skroutz/downloader/notifier"
 )
 
 var (
@@ -39,6 +41,8 @@ var (
 	callbackServerHost = "localhost"
 	callbackServerPort = "9894"
 	callbackServerPath = "/callback/"
+	cbChan             = make(chan []byte)
+	cbServer           = newCallbackServer(fmt.Sprintf("%s:%s", callbackServerHost, callbackServerPort), cbChan)
 )
 
 func TestMain(m *testing.M) {
@@ -65,6 +69,15 @@ func TestMain(m *testing.M) {
 	}()
 	waitForServer(fileServerPort)
 
+	// start test callback server
+	go func() {
+		err := cbServer.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+	waitForServer(callbackServerPort)
+
 	// start API server, Processor & Notifier
 	wg.Add(1)
 	go start("api", "--host", apiHost, "--port", apiPort)
@@ -78,12 +91,16 @@ func TestMain(m *testing.M) {
 	wg.Add(1)
 	go start("notifier")
 
-	mu.Lock()
 	result := m.Run()
-	mu.Unlock()
 
 	// shutdown test file server
 	err := fileServer.Shutdown(context.TODO())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// shutdown test callback server
+	err = cbServer.Shutdown(context.TODO())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -97,21 +114,10 @@ func TestMain(m *testing.M) {
 	os.Exit(result)
 }
 
-func TestFileExists(t *testing.T) {
+func TestResourceExists(t *testing.T) {
 	var served, downloaded *os.File
 	var expected, actual []byte
 	var err error
-
-	// start test callback server
-	cbChan := make(chan []byte)
-	cbServer := newCallbackServer(fmt.Sprintf("%s:%s", callbackServerHost, callbackServerPort), cbChan)
-	go func() {
-		err := cbServer.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
-		}
-	}()
-	waitForServer(callbackServerPort)
 
 	// Test job creation (APIServer)
 	downloadURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fileServerHost, fileServerPort, fileServerPath)
@@ -178,12 +184,7 @@ FILECHECK:
 	}
 
 	// Test callback mechanism (Notifier)
-	var parsedCB struct {
-		Success     bool
-		Error       string
-		Extra       string
-		DownloadURL string `json:"download_url"`
-	}
+	var parsedCB notifier.CallbackInfo
 
 	select {
 	case <-time.After(5 * time.Second):
@@ -207,11 +208,43 @@ FILECHECK:
 				parsedCB)
 		}
 	}
+}
 
-	// shutdown callbackServer
-	err = cbServer.Shutdown(context.TODO())
-	if err != nil {
-		t.Error(err)
+func TestResourceDontExist(t *testing.T) {
+	var parsedCB notifier.CallbackInfo
+
+	downloadURL := fmt.Sprintf("http://%s:%s%si-dont-exist.foo", fileServerHost, fileServerPort, fileServerPath)
+	callbackURL := fmt.Sprintf("http://%s:%s%s", callbackServerHost, callbackServerPort, callbackServerPath)
+	jobData := map[string]interface{}{
+		"aggr_id":      "foobar",
+		"aggr_limit":   1,
+		"url":          downloadURL,
+		"callback_url": callbackURL}
+
+	postJob(jobData, t)
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-cbChan:
+		err := json.Unmarshal(cb, &parsedCB)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		// Success:false, Error:"", Extra:"", DownloadURL:"http://localhost/wCNMXVXROtz2EQ"}
+		if parsedCB.Success != false {
+			t.Fatal("Expected Success to be false")
+		}
+		if !strings.HasSuffix(parsedCB.Error, "404") {
+			t.Fatalf("Expected Error to end with '404': %s", parsedCB.Error)
+		}
+		if parsedCB.Extra != "" {
+			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
+		}
+		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
+			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
+				parsedCB)
+		}
 	}
 }
 

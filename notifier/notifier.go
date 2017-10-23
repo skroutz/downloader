@@ -90,8 +90,7 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 	}
 }
 
-// Notify posts callback info to the Job's CallbackURL
-// using the provided http.Client
+// Notify posts callback info to j.CallbackURL
 func (n *Notifier) Notify(j *job.Job) {
 	n.Storage.UpdateCallbackState(j, job.StateInProgress, j.Meta)
 
