@@ -149,7 +149,7 @@ FILECHECK:
 					break FILECHECK
 				}
 			} else {
-				fmt.Printf("Expected file not found (%s), retrying...\n",
+				fmt.Printf("Expected file not found (%s), retrying (%s)...\n",
 					filePath, err)
 				time.Sleep(50 * time.Millisecond)
 			}
@@ -191,10 +191,10 @@ FILECHECK:
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
 		if parsedCB.Success != true {
-			t.Fatal("Expected Success to be true: %#v", parsedCB)
+			t.Fatalf("Expected Success to be true: %#v", parsedCB)
 		}
 		if parsedCB.Error != "" {
-			t.Fatal("Expected Error to be empty: %#v", parsedCB)
+			t.Fatalf("Expected Error to be empty: %#v", parsedCB)
 		}
 		if parsedCB.Extra != "" {
 			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
