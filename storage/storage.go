@@ -78,6 +78,11 @@ func (s *Storage) GetJob(id string) (job.Job, error) {
 	return jobFromMap(val)
 }
 
+// RemoveJob removes the job key from Redis.
+func (s *Storage) RemoveJob(id string) error {
+	return s.Redis.Del(JobKeyPrefix + id).Err()
+}
+
 // JobExists checks if the given job exists in Redis.
 // If a non-nil error is returned, the first returned value should be ignored.
 func (s *Storage) JobExists(j *job.Job) (bool, error) {

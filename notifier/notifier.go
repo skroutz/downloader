@@ -116,7 +116,7 @@ func (n *Notifier) Notify(j *job.Job) {
 		return
 	}
 
-	n.markCbSuccess(j)
+	n.Storage.RemoveJob(j.ID)
 }
 
 // retryOrFail checks the callback count of the current download
@@ -134,7 +134,7 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 // return callbackInfo to the caller
 func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 	if j.DownloadState != job.StateSuccess && j.DownloadState != job.StateFailed {
-		return CallbackInfo{}, fmt.Errorf("Invalid Job State %s", j.DownloadState)
+		return CallbackInfo{}, fmt.Errorf("Invalid job download state: '%s'", j.DownloadState)
 	}
 
 	return CallbackInfo{
@@ -157,12 +157,6 @@ func jobDownloadURL(j *job.Job) string {
 
 func (n *Notifier) markCbInProgress(j *job.Job) error {
 	j.CallbackState = job.StateInProgress
-	j.CallbackMeta = ""
-	return n.Storage.SaveJob(j)
-}
-
-func (n *Notifier) markCbSuccess(j *job.Job) error {
-	j.CallbackState = job.StateSuccess
 	j.CallbackMeta = ""
 	return n.Storage.SaveJob(j)
 }

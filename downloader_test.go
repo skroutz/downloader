@@ -356,7 +356,7 @@ func TestLoad(t *testing.T) {
 		case cb := <-callbacks:
 			err := json.Unmarshal(cb, &ci)
 			if err != nil {
-				t.Fatal("Could not parse callback data: %s (%s)", err, cb)
+				t.Fatalf("Could not parse callback data: %s (%s)", err, cb)
 			}
 			if ci.Extra != "foo" {
 				t.Fatalf("Expected Extra to be 'foo', was '%s'", ci.Extra)
@@ -376,11 +376,11 @@ func TestLoad(t *testing.T) {
 	}
 
 	if results[true] != nreqs/2 {
-		t.Fatalf("Expected %d successful downloads, got %d", results[true])
+		t.Fatalf("Expected %d successful downloads, got %d", nreqs/2, results[true])
 	}
 
 	if results[false] != nreqs/2 {
-		t.Fatalf("Expected %d failed downloads, got %d", results[false])
+		t.Fatalf("Expected %d failed downloads, got %d", nreqs/2, results[false])
 	}
 
 	wg.Wait()
