@@ -133,6 +133,8 @@ func (p *Processor) Start(closeCh chan struct{}) {
 	defer scanTicker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 
+	p.collectRogueDownloads()
+
 PROCESSOR_LOOP:
 	for {
 		select {
@@ -187,6 +189,50 @@ PROCESSOR_LOOP:
 	wpWg.Wait()
 	p.Log.Println("Shutting down...")
 	closeCh <- struct{}{}
+}
+
+// collectRogueDownloads Scans Redis for jobs that have InProgress DownloadState.
+// This indicates they are leftover from an interrupted previous run and should get requeued.
+func (p *Processor) collectRogueDownloads() {
+	var cursor uint64
+	var rogueCount uint64
+
+	for {
+		var keys []string
+		var err error
+		keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.JobKeyPrefix+"*", 50).Result()
+		if err != nil {
+			p.Log.Println(err)
+			break
+		}
+
+		for _, jobID := range keys {
+			strCmd := p.Storage.Redis.HGet(jobID, "DownloadState")
+			if strCmd.Err() != nil {
+				p.Log.Println(strCmd.Err())
+				continue
+			}
+			if job.State(strCmd.Val()) == job.StateInProgress {
+				jb, err := p.Storage.GetJob(strings.TrimPrefix(jobID, storage.JobKeyPrefix))
+				if err != nil {
+					p.Log.Printf("Could not get job for Redis: %v", err)
+					continue
+				}
+				err = p.Storage.QueuePendingDownload(&jb)
+				if err != nil {
+					p.Log.Printf("Could not queue job for download: %v", err)
+					continue
+				}
+				rogueCount++
+			}
+		}
+
+		if cursor == 0 {
+			break
+		}
+	}
+	p.Log.Printf("Queued %d Rogue downloads", rogueCount)
+
 }
 
 // newWorkerPool initializes and returns a WorkerPool for aggr.
