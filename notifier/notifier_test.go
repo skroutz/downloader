@@ -80,3 +80,48 @@ func TestNotifyJobDeletion(t *testing.T) {
 		}
 	}
 }
+
+func TestRogueCollection(t *testing.T) {
+	notifier := New(store, 10)
+
+	testcases := []struct {
+		Job           job.Job
+		expectedState job.State
+	}{
+		{
+			job.Job{
+				ID:            "RogueOne",
+				CallbackState: job.StateInProgress,
+			},
+			job.StatePending,
+		},
+		{
+			job.Job{
+				ID:            "Valid",
+				CallbackState: job.StateFailed,
+			},
+			job.StateFailed,
+		},
+	}
+
+	for _, tc := range testcases {
+		store.SaveJob(&tc.Job)
+	}
+
+	//start and close Notifier
+	ch := make(chan struct{})
+	go notifier.Start(ch)
+	ch <- struct{}{}
+	<-ch
+
+	for _, tc := range testcases {
+		j, err := store.GetJob(tc.Job.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if j.CallbackState != tc.expectedState {
+			t.Fatalf("Expected job state %s, found %s", tc.expectedState, j.DownloadState)
+		}
+	}
+}
