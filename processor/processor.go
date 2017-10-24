@@ -138,7 +138,6 @@ PROCESSOR_LOOP:
 		select {
 		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
-			p.Log.Println("Deleting worker pool for " + aggrID + "...")
 			delete(p.pools, aggrID)
 		// Close signal from upper layer
 		case <-closeCh:
@@ -266,14 +265,11 @@ WORKERPOOL_LOOP:
 
 	close(wp.jobChan)
 	wg.Wait()
-	wp.log.Printf("Closing...")
+	wp.log.Printf("Bye!")
 }
 
 // work consumes Jobs from wp and performs them.
 func (wp *workerPool) work(ctx context.Context, saveDir string) {
-	logger := log.New(os.Stderr, wp.log.Prefix()+"[worker] ", log.Ldate|log.Ltime)
-	defer logger.Println("Bye!")
-
 	lastActive := time.Now()
 
 	for {
