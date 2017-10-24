@@ -138,7 +138,7 @@ PROCESSOR_LOOP:
 		select {
 		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
-			p.Log.Println("Deleting worker pool for " + aggrID)
+			p.Log.Println("Deleting worker pool for " + aggrID + "...")
 			delete(p.pools, aggrID)
 		// Close signal from upper layer
 		case <-closeCh:
@@ -149,7 +149,8 @@ PROCESSOR_LOOP:
 			for {
 				var keys []string
 				var err error
-				if keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.JobsKeyPrefix+"*", 50).Result(); err != nil {
+				keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.JobsKeyPrefix+"*", 50).Result()
+				if err != nil {
 					p.Log.Println(fmt.Errorf("Could not scan keys: %v", err))
 					break
 				}
