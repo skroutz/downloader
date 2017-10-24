@@ -44,6 +44,7 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Error reading request body: "+err.Error(), http.StatusBadRequest)
+		return
 	}
 	r.Body.Close()
 
