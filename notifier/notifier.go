@@ -149,6 +149,9 @@ func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 //
 // TODO: Actually make it smart
 func jobDownloadURL(j *job.Job) string {
+	if j.DownloadState != job.StateSuccess {
+		return ""
+	}
 	return fmt.Sprintf("http://localhost/%s", j.ID)
 }
 

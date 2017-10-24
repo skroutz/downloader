@@ -115,7 +115,7 @@ func main() {
 				<-sigCh
 				processor.Log.Println("Shutting down...")
 				closeChan <- struct{}{}
-				processor.Log.Println("Waiting for worker pools to finish...")
+				processor.Log.Println("Waiting for worker pools to shut down...")
 				<-closeChan
 				processor.Log.Println("Bye!")
 				return nil
@@ -148,7 +148,7 @@ func main() {
 				<-sigCh
 				logger.Println("Shutting down...")
 				closeChan <- struct{}{}
-				logger.Println("Waiting for the notifier to finish.")
+				logger.Println("Waiting for notifier to shut down...")
 				<-closeChan
 				logger.Println("Bye!")
 				return nil

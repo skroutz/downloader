@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -22,44 +24,50 @@ import (
 	"golang.skroutz.gr/skroutz/downloader/notifier"
 )
 
+type testJob map[string]interface{}
+
 var (
 	mu           sync.Mutex
 	originalArgs = make([]string, len(os.Args))
 
-	wg sync.WaitGroup
+	componentsWg sync.WaitGroup
 
-	apiClient http.Client
-	apiHost   = "localhost"
-	apiPort   = "8123"
+	// global test limit used in HTTP & disk I/O
+	timeout = 10 * time.Second
+
+	apiClient = &http.Client{
+		Transport: &http.Transport{DisableKeepAlives: true},
+		Timeout:   timeout}
+	apiHost = "localhost"
+	apiPort = "8123"
 
 	// An HTTP file server that serves the contents of testdata/.
 	// Used to test Processor.
-	fsHost     = "localhost"
-	fsPort     = "9718"
-	fsPath     = "/testdata/"
+	fsHost = "localhost"
+	fsPort = "9718"
+	fsPath = "/testdata/"
+	// used to instrument fileServer
 	fsChan     = make(chan int, 10)
 	fileServer = newFileServer(fmt.Sprintf("%s:%s", fsHost, fsPort), fsChan)
 
-	csHost   = "localhost"
-	csPort   = "9894"
-	csPath   = "/callback/"
-	csChan   = make(chan []byte)
-	cbServer = newCallbackServer(fmt.Sprintf("%s:%s", csHost, csPort), csChan)
-
-	timeout = 5 * time.Second
+	csHost = "localhost"
+	csPort = "9894"
+	csPath = "/callback/"
+	// callbacks from cbServer are emitted to this channel
+	callbacks = make(chan []byte, 1000)
+	cbServer  = newCallbackServer(fmt.Sprintf("%s:%s", csHost, csPort), callbacks)
 )
 
 func TestMain(m *testing.M) {
 	// initialize global variables
 	copy(originalArgs, os.Args)
-	apiClient = http.Client{Timeout: timeout}
 
 	flushRedis()
 
 	// start test file server
-	wg.Add(1)
+	componentsWg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer componentsWg.Done()
 		err := fileServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
@@ -77,38 +85,41 @@ func TestMain(m *testing.M) {
 	waitForServer(csPort)
 
 	// start API server, Processor & Notifier
-	wg.Add(1)
+	componentsWg.Add(1)
 	go start("api", "--host", apiHost, "--port", apiPort)
 	waitForServer(apiPort)
 
-	wg.Add(1)
+	componentsWg.Add(1)
 	go start("processor")
 	// circumvent race conditions with os.Args
 	time.Sleep(500 * time.Millisecond)
 
-	wg.Add(1)
+	componentsWg.Add(1)
 	go start("notifier")
 
 	result := m.Run()
 
 	// shutdown test file server
+	log.Println("Shutting down test file server...")
 	err := fileServer.Shutdown(context.TODO())
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// shutdown test callback server
+	log.Println("Shutting down test callback server...")
 	err = cbServer.Shutdown(context.TODO())
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	fmt.Println("Shutting down API, Processor & Notifier..")
 	sigCh <- os.Interrupt // shutdown APIServer
 	sigCh <- os.Interrupt // shutdown Processor
 	sigCh <- os.Interrupt // shutdown Notifier
 
-	wg.Wait()
-	//purgeRedis()
+	componentsWg.Wait()
+	flushRedis()
 	os.Exit(result)
 }
 
@@ -118,44 +129,46 @@ func TestResourceExists(t *testing.T) {
 	var err error
 
 	// Test job creation (APIServer)
-	downloadURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fsHost, fsPort, fsPath)
-	callbackURL := fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)
-	jobData := map[string]interface{}{
+	jobData := testJob{
 		"aggr_id":      "asemas",
 		"aggr_limit":   1,
-		"url":          downloadURL,
-		"callback_url": callbackURL}
+		"url":          downloadURL("sample-1.jpg"),
+		"callback_url": callbackURL(),
+		"extra":        "foobar"}
 
-	postJob(jobData, t)
+	err = postJob(jobData)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Test callback mechanism (Notifier)
-	var parsedCB notifier.CallbackInfo
+	var ci notifier.CallbackInfo
 
 	select {
 	case <-time.After(timeout):
 		t.Fatal("Callback request receive timeout")
-	case cb := <-csChan:
-		err = json.Unmarshal(cb, &parsedCB)
+	case cb := <-callbacks:
+		err = json.Unmarshal(cb, &ci)
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
-		if !parsedCB.Success {
-			t.Fatalf("Expected Success to be true: %#v", parsedCB)
+		if !ci.Success {
+			t.Fatalf("Expected Success to be true: %#v", ci)
 		}
-		if parsedCB.Error != "" {
-			t.Fatalf("Expected Error to be empty: %#v", parsedCB)
+		if ci.Error != "" {
+			t.Fatalf("Expected Error to be empty: %#v", ci)
 		}
-		if parsedCB.Extra != "" {
-			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
+		if ci.Extra != "foobar" {
+			t.Fatalf("Expected Extra to be 'foobar', was %s", ci.Extra)
 		}
-		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
+		if !strings.HasPrefix(ci.DownloadURL, "http://localhost/") {
 			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
-				parsedCB)
+				ci)
 		}
 	}
 
 	// Test job processing (Processor)
-	downloadURI, err := url.Parse(parsedCB.DownloadURL)
+	downloadURI, err := url.Parse(ci.DownloadURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,45 +226,47 @@ FILECHECK:
 }
 
 func TestResourceDontExist(t *testing.T) {
-	var parsedCB notifier.CallbackInfo
+	var ci notifier.CallbackInfo
 
-	job := map[string]interface{}{
+	job := testJob{
 		"aggr_id":      "foobar",
 		"aggr_limit":   1,
-		"url":          fmt.Sprintf("http://%s:%s%si-dont-exist.foo", fsHost, fsPort, fsPath),
-		"callback_url": fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)}
+		"url":          downloadURL("i-dont-exist.foo"),
+		"callback_url": callbackURL()}
 
-	postJob(job, t)
+	err := postJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	select {
 	case <-time.After(timeout):
 		t.Fatal("Callback request receive timeout")
-	case cb := <-csChan:
-		err := json.Unmarshal(cb, &parsedCB)
+	case cb := <-callbacks:
+		err := json.Unmarshal(cb, &ci)
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
-		if parsedCB.Success {
+		if ci.Success {
 			t.Fatal("Expected Success to be false")
 		}
-		if !strings.HasSuffix(parsedCB.Error, "404") {
-			t.Fatalf("Expected Error to end with '404': %s", parsedCB.Error)
+		if !strings.HasSuffix(ci.Error, "404") {
+			t.Fatalf("Expected Error to end with '404': %s", ci.Error)
 		}
-		if parsedCB.Extra != "" {
-			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
+		if ci.DownloadURL != "" {
+			t.Fatalf("Expected DownloadURL to be empty: %#v", ci)
 		}
-		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
-			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
-				parsedCB)
+		if ci.Extra != "" {
+			t.Fatalf("Expected Extra to be empty: %#v", ci)
 		}
 	}
 }
 
 // test a download URL that will fail the first 2 times but succeeds the 3rd
 func TestTransientDownstreamError(t *testing.T) {
-	var parsedCB notifier.CallbackInfo
+	var ci notifier.CallbackInfo
 
-	job := map[string]interface{}{
+	job := testJob{
 		"aggr_id":      "murphy",
 		"aggr_limit":   1,
 		"url":          fmt.Sprintf("http://%s:%s%ssample-1.jpg", fsHost, fsPort, fsPath),
@@ -261,31 +276,114 @@ func TestTransientDownstreamError(t *testing.T) {
 	fsChan <- http.StatusServiceUnavailable  // 2nd try
 	// 3rd try will succeed
 
-	postJob(job, t)
+	err := postJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	select {
 	// bump timeout cause we also have to wait for the backoffs
 	case <-time.After(timeout + (5 * time.Second)):
 		t.Fatal("Callback request receive timeout")
-	case cb := <-csChan:
-		err := json.Unmarshal(cb, &parsedCB)
+	case cb := <-callbacks:
+		err := json.Unmarshal(cb, &ci)
 		if err != nil {
 			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
 		}
-		if !parsedCB.Success {
+		if !ci.Success {
 			t.Fatal("Expected Success to be true")
 		}
-		if parsedCB.Error != "" {
-			t.Fatalf("Expected Error to be empty", parsedCB.Error)
+		if ci.Error != "" {
+			t.Fatalf("Expected Error to be empty, was '%s'", ci.Error)
 		}
-		if parsedCB.Extra != "" {
-			t.Fatalf("Expected Extra to be empty: %#v", parsedCB)
+		if ci.Extra != "" {
+			t.Fatalf("Expected Extra to be empty: %#v", ci)
 		}
-		if !strings.HasPrefix(parsedCB.DownloadURL, "http://localhost/") {
+		if !strings.HasPrefix(ci.DownloadURL, "http://localhost/") {
 			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
-				parsedCB)
+				ci)
 		}
 	}
+}
+
+func TestLoad(t *testing.T) {
+	var wg sync.WaitGroup
+	nreqs := 300
+	aggrs := []string{"loadtest0", "loadtest1", "loadtest2", "loadtest3", "loadtest4"}
+	rand.Seed(time.Now().Unix())
+
+	genJob := func(url string) testJob {
+		return testJob{
+			"aggr_id":      aggrs[rand.Intn(len(aggrs))],
+			"aggr_limit":   nreqs / 2,
+			"url":          downloadURL(url),
+			"callback_url": callbackURL(),
+			"extra":        "foo"}
+	}
+
+	if nreqs%2 != 0 {
+		t.Fatalf("nreqs must be an even number, was %d", nreqs)
+	}
+
+	// success jobs
+	for i := 0; i < nreqs/2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := postJob(genJob("load-test.jpg"))
+			if err != nil {
+				log.Fatal(err)
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := postJob(genJob("i-dont-exist.foo"))
+			if err != nil {
+				log.Fatal(err)
+			}
+		}()
+	}
+
+	var ci notifier.CallbackInfo
+	results := make(map[bool]int, nreqs)
+
+	for i := 0; i < nreqs; i++ {
+		select {
+		case <-time.After(timeout):
+			t.Fatal("Callback request receive timeout")
+		case cb := <-callbacks:
+			err := json.Unmarshal(cb, &ci)
+			if err != nil {
+				t.Fatal("Could not parse callback data: %s (%s)", err, cb)
+			}
+			if ci.Extra != "foo" {
+				t.Fatalf("Expected Extra to be 'foo', was '%s'", ci.Extra)
+			}
+			if ci.Success {
+				if !strings.HasPrefix(ci.DownloadURL, "http://localhost/") {
+					t.Fatalf("Expected DownloadURL to begin with 'http://localhost/', was '%s'",
+						ci.DownloadURL)
+				}
+			} else {
+				if ci.DownloadURL != "" {
+					t.Fatalf("Expected DownloadURL to be empty, was '%s'", ci.DownloadURL)
+				}
+			}
+			results[ci.Success]++
+		}
+	}
+
+	if results[true] != nreqs/2 {
+		t.Fatalf("Expected %d successful downloads, got %d", results[true])
+	}
+
+	if results[false] != nreqs/2 {
+		t.Fatalf("Expected %d failed downloads, got %d", results[false])
+	}
+
+	wg.Wait()
 }
 
 // executes main() with the provided args.
@@ -298,13 +396,13 @@ func start(args ...string) {
 	mu.Unlock()
 
 	main()
-	wg.Done()
+	componentsWg.Done()
 }
 
 // blocks until the API server is up
 func waitForServer(port string) {
 	time.Sleep(500 * time.Millisecond)
-	conn, err := net.DialTimeout("tcp", "localhost:"+port, 3*time.Second)
+	conn, err := net.DialTimeout("tcp", "localhost:"+port, timeout)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -312,22 +410,23 @@ func waitForServer(port string) {
 }
 
 // Creates a Job by executing a request to the API server
-func postJob(data map[string]interface{}, t *testing.T) {
+func postJob(job testJob) error {
 	// TODO: get download endpoint from config
 	uri := fmt.Sprintf("http://%s:%s/download", apiHost, apiPort)
 
-	v, _ := json.Marshal(data)
+	v, _ := json.Marshal(job)
 	resp, err := apiClient.Post(uri, "application/json", bytes.NewBuffer(v))
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 201 {
 		info, _ := httputil.DumpResponse(resp, true)
 		log.Println(string(info))
-		t.Fatalf("Expected 201 response, got %d", resp.StatusCode)
+		return errors.New(fmt.Sprintf("Expected 201 response, got %d", resp.StatusCode))
 	}
+	return nil
 }
 
 func newFileServer(addr string, ch chan int) *http.Server {
@@ -349,7 +448,13 @@ func newFileServer(addr string, ch chan int) *http.Server {
 	})
 
 	mux.Handle(fsPath, http.StripPrefix(fsPath, h))
-	return &http.Server{Handler: mux, Addr: addr}
+	return &http.Server{
+		Handler:           mux,
+		Addr:              addr,
+		ReadTimeout:       timeout,
+		WriteTimeout:      timeout,
+		ReadHeaderTimeout: timeout,
+	}
 }
 
 // a test callback server used to test the Notifier. When it receives a request,
@@ -381,4 +486,12 @@ func flushRedis() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func downloadURL(filename string) string {
+	return fmt.Sprintf("http://%s:%s%s%s", fsHost, fsPort, fsPath, filename)
+}
+
+func callbackURL() string {
+	return fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)
 }
