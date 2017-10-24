@@ -299,12 +299,6 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 // Redis accordingly. It may retry downloading on certain errors.
 func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	wp.markJobInProgress(j)
-	out, err := os.Create(wp.p.StorageDir + j.ID)
-	if err != nil {
-		wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
-		return
-	}
-	defer out.Close()
 
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
@@ -345,6 +339,13 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		return
 	}
 	defer resp.Body.Close()
+
+	out, err := os.Create(wp.p.StorageDir + j.ID)
+	if err != nil {
+		wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
+		return
+	}
+	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
