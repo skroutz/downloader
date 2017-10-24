@@ -6,6 +6,10 @@ type Config struct {
 		Addr string `json:"addr"`
 	} `json:"redis"`
 
+	API struct {
+		HeartbeatPath string `json:"heartbeat_path"`
+	} `json:"api"`
+
 	Processor struct {
 		StorageDir string `json:"storage_dir"`
 	} `json:"processor"`

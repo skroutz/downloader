@@ -61,7 +61,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				api := api.New(storage, c.String("host"), c.Int("port"))
+				api := api.New(storage, c.String("host"), c.Int("port"), cfg.API.HeartbeatPath)
 
 				logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
 				go func() {

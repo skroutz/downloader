@@ -2,6 +2,9 @@
 	"redis": {
 		"addr": "127.0.0.1:6379"
 	},
+	"api": {
+		"heartbeat_path":"/tmp/disable_api"
+	},
 	"processor": {
 		"storage_dir":"/tmp/"
 	},

@@ -3,9 +3,11 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -26,10 +28,25 @@ func init() {
 		base64.RawURLEncoding)
 }
 
-func New(s *storage.Storage, host string, port int) *API {
+// heartbeat returns http.statusServiceUnavailable (503) if path exists, 200 otherwise
+func heartbeat(path string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			fmt.Fprintf(w, "OK")
+			return
+		}
+
+		msg := fmt.Sprintf("Service disabled, '%s' exists!", path)
+		http.Error(w, msg, http.StatusServiceUnavailable)
+	}
+}
+
+func New(s *storage.Storage, host string, port int, heartbeatPath string) *API {
 	as := &API{Storage: s}
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)
+	mux.HandleFunc("/hb", heartbeat(heartbeatPath))
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	return as
 }
