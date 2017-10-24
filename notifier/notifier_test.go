@@ -16,10 +16,15 @@ var (
 	Redis    = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	cbServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}))
+	store *storage.Storage
 )
 
 func init() {
 	err := Redis.FlushDB().Err()
+	if err != nil {
+		log.Fatal(err)
+	}
+	store, err = storage.New(Redis)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,19 +53,15 @@ func TestNotifyJobDeletion(t *testing.T) {
 			CallbackURL:   "http://localhost:39871/nonexistent"}, true},
 	}
 
-	st, err := storage.New(Redis)
-	if err != nil {
-		t.Fatal(err)
-	}
-	notifier := New(st, 10)
+	notifier := New(store, 10)
 
 	for _, tc := range testcases {
-		err = st.QueuePendingCallback(tc.j)
+		err := store.QueuePendingCallback(tc.j)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		exists, err := st.JobExists(tc.j)
+		exists, err := store.JobExists(tc.j)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +71,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 
 		notifier.Notify(tc.j)
 
-		exists, err = st.JobExists(tc.j)
+		exists, err = store.JobExists(tc.j)
 		if err != nil {
 			t.Fatal(err)
 		}
