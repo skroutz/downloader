@@ -139,6 +139,7 @@ func (n *Notifier) collectRogueCallbacks() {
 
 // Notify posts callback info to j.CallbackURL
 func (n *Notifier) Notify(j *job.Job) {
+	j.CallbackCount++
 	n.markCbInProgress(j)
 
 	cbInfo, err := getCallbackInfo(j)
@@ -172,7 +173,6 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
 		return n.markCbFailed(j, err)
 	}
-	j.CallbackCount++
 	return n.Storage.QueuePendingCallback(j)
 }
 
