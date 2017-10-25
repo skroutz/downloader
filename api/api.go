@@ -120,4 +120,8 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+
+	resp := fmt.Sprintf(`{"id":"%s"}`, j.ID)
+	w.Write([]byte(resp))
 }
