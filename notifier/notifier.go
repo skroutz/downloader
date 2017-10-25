@@ -144,7 +144,10 @@ func (n *Notifier) collectRogueCallbacks() {
 			break
 		}
 	}
-	n.Log.Printf("Queued %d rogue callbacks", rogueCount)
+
+	if rogueCount > 0 {
+		n.Log.Printf("Queued %d rogue callbacks", rogueCount)
+	}
 }
 
 // Notify posts callback info to j.CallbackURL

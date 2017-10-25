@@ -231,7 +231,10 @@ func (p *Processor) collectRogueDownloads() {
 			break
 		}
 	}
-	p.Log.Printf("Queued %d Rogue downloads", rogueCount)
+
+	if rogueCount > 0 {
+		p.Log.Printf("Queued %d rogue downloads", rogueCount)
+	}
 
 }
 
