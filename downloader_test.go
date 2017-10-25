@@ -307,15 +307,24 @@ func TestTransientDownstreamError(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	var wg sync.WaitGroup
 	nreqs := 300
-	aggrs := []string{"loadtest0", "loadtest1", "loadtest2", "loadtest3", "loadtest4"}
+	naggrs := 5
+	limit := 10
+
+	var wg sync.WaitGroup
+
+	aggrs := make([]string, naggrs)
+
+	for n := 0; n < naggrs; n++ {
+		aggrs[n] = fmt.Sprintf("loadtest:%d", n)
+	}
+
 	rand.Seed(time.Now().Unix())
 
 	genJob := func(url string) testJob {
 		return testJob{
 			"aggr_id":      aggrs[rand.Intn(len(aggrs))],
-			"aggr_limit":   10,
+			"aggr_limit":   limit,
 			"url":          downloadURL(url),
 			"callback_url": callbackURL(),
 			"extra":        "foo"}
