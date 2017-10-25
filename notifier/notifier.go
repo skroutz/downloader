@@ -82,11 +82,16 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 		default:
 			job, err := n.Storage.PopCallback()
 			if err != nil {
-				if _, ok := err.(storage.QueueEmptyError); ok {
-					time.Sleep(time.Second)
-				} else {
+				switch err {
+				case storage.ErrEmptyQueue:
+					// noop
+				case storage.ErrRetryLater:
+					// noop
+				default:
 					log.Println(err)
 				}
+
+				time.Sleep(time.Second)
 				continue
 			}
 			n.cbChan <- job

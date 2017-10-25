@@ -280,7 +280,9 @@ WORKERPOOL_LOOP:
 		default:
 			job, err := wp.p.Storage.PopJob(&wp.aggr)
 			if err != nil {
-				if _, ok := err.(storage.QueueEmptyError); ok {
+
+				switch err {
+				case storage.ErrEmptyQueue:
 					// Stop the WorkerPool if
 					// 1) The queue is empty
 					// 2) No workers are running
@@ -288,7 +290,9 @@ WORKERPOOL_LOOP:
 						wp.log.Println("Closing due to inactivity...")
 						break WORKERPOOL_LOOP
 					}
-				} else {
+				case storage.ErrRetryLater:
+					// noop
+				default:
 					wp.log.Println(err)
 				}
 
