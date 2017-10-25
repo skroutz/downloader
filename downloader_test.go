@@ -315,7 +315,7 @@ func TestLoad(t *testing.T) {
 	genJob := func(url string) testJob {
 		return testJob{
 			"aggr_id":      aggrs[rand.Intn(len(aggrs))],
-			"aggr_limit":   nreqs / 2,
+			"aggr_limit":   10,
 			"url":          downloadURL(url),
 			"callback_url": callbackURL(),
 			"extra":        "foo"}
@@ -325,26 +325,27 @@ func TestLoad(t *testing.T) {
 		t.Fatalf("nreqs must be an even number, was %d", nreqs)
 	}
 
-	// success jobs
-	for i := 0; i < nreqs/2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			err := postJob(genJob("load-test.jpg"))
-			if err != nil {
-				log.Fatal(err)
-			}
-		}()
+	downloads := make(chan string, nreqs)
 
+	// API client pool
+	for i := 0; i < 60; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := postJob(genJob("i-dont-exist.foo"))
-			if err != nil {
-				log.Fatal(err)
+			for dl := range downloads {
+				err := postJob(genJob(dl))
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 		}()
 	}
+
+	for i := 0; i < nreqs/2; i++ {
+		downloads <- "load-test.jpg"
+		downloads <- "i-dont-exist.foo"
+	}
+	close(downloads)
 
 	var ci notifier.CallbackInfo
 	results := make(map[bool]int, nreqs)
@@ -399,14 +400,20 @@ func start(args ...string) {
 	componentsWg.Done()
 }
 
-// blocks until the API server is up
+// blocks until a server listens on the given port
 func waitForServer(port string) {
-	time.Sleep(500 * time.Millisecond)
-	conn, err := net.DialTimeout("tcp", "localhost:"+port, timeout)
-	if err != nil {
-		log.Fatal(err)
+	backoff := 50 * time.Millisecond
+
+	for i := 0; i < 10; i++ {
+		conn, err := net.DialTimeout("tcp", ":"+port, timeout)
+		if err != nil {
+			time.Sleep(backoff)
+			continue
+		}
+		conn.Close()
+		return
 	}
-	conn.Close()
+	log.Fatalf("Server on port %s not up after 10 retries", port)
 }
 
 // Creates a Job by executing a request to the API server
@@ -415,9 +422,10 @@ func postJob(job testJob) error {
 	uri := fmt.Sprintf("http://%s:%s/download", apiHost, apiPort)
 
 	v, _ := json.Marshal(job)
+
 	resp, err := apiClient.Post(uri, "application/json", bytes.NewBuffer(v))
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
 	defer resp.Body.Close()
 
