@@ -61,9 +61,9 @@ func main() {
 				if err != nil {
 					return err
 				}
-				api := api.New(storage, c.String("host"), c.Int("port"), cfg.API.HeartbeatPath)
-
 				logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
+				api := api.New(storage, c.String("host"), c.Int("port"), cfg.API.HeartbeatPath, logger)
+
 				go func() {
 					logger.Println(fmt.Sprintf("Listening on %s...", api.Server.Addr))
 					err := api.Server.ListenAndServe()
@@ -135,22 +135,22 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
 				storage, err := storage.New(redisClient("notifier", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
-				notifier := notifier.New(storage, cfg.Notifier.Concurrency)
+				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
+				notifier := notifier.New(storage, cfg.Notifier.Concurrency, logger)
 
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan)
 
 				<-sigCh
-				logger.Println("Shutting down...")
+				notifier.Log.Println("Shutting down...")
 				closeChan <- struct{}{}
-				logger.Println("Waiting for notifier to shut down...")
+				notifier.Log.Println("Waiting for notifier to shut down...")
 				<-closeChan
-				logger.Println("Bye!")
+				notifier.Log.Println("Bye!")
 				return nil
 			},
 			Before: parseConfig,

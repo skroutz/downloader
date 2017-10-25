@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 type API struct {
 	Server  *http.Server
 	Storage *storage.Storage
+	Log     *log.Logger
 }
 
 var idgen *rng
@@ -42,12 +44,14 @@ func heartbeat(path string) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func New(s *storage.Storage, host string, port int, heartbeatPath string) *API {
+func New(s *storage.Storage, host string, port int, heartbeatPath string,
+	logger *log.Logger) *API {
 	as := &API{Storage: s}
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)
 	mux.HandleFunc("/hb", heartbeat(heartbeatPath))
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
+	as.Log = logger
 	return as
 }
 
@@ -123,5 +127,8 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	resp := fmt.Sprintf(`{"id":"%s"}`, j.ID)
-	w.Write([]byte(resp))
+	_, err = w.Write([]byte(resp))
+	if err != nil {
+		as.Log.Printf("Error writing response to request body '%s': %s", body, err)
+	}
 }

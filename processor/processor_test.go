@@ -60,7 +60,10 @@ func TestRogueCollection(t *testing.T) {
 	}
 
 	for _, testcase := range testcases {
-		store.SaveJob(&testcase.Job)
+		err = store.SaveJob(&testcase.Job)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	processor.collectRogueDownloads()

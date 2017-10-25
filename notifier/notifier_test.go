@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
@@ -16,7 +17,8 @@ var (
 	Redis    = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	cbServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}))
-	store *storage.Storage
+	store  *storage.Storage
+	logger = log.New(os.Stderr, "[test-notifier] ", log.Ldate|log.Ltime)
 )
 
 func init() {
@@ -53,7 +55,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 			CallbackURL:   "http://localhost:39871/nonexistent"}, true},
 	}
 
-	notifier := New(store, 10)
+	notifier := New(store, 10, logger)
 
 	for _, tc := range testcases {
 		err := store.QueuePendingCallback(tc.j)
@@ -69,7 +71,10 @@ func TestNotifyJobDeletion(t *testing.T) {
 			t.Fatalf("Expected job with id %s to exist in Redis", tc.j.ID)
 		}
 
-		notifier.Notify(tc.j)
+		err = notifier.Notify(tc.j)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		exists, err = store.JobExists(tc.j)
 		if err != nil {
@@ -82,7 +87,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 }
 
 func TestRogueCollection(t *testing.T) {
-	notifier := New(store, 10)
+	notifier := New(store, 10, logger)
 
 	testcases := []struct {
 		Job           job.Job
@@ -105,7 +110,10 @@ func TestRogueCollection(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		store.SaveJob(&tc.Job)
+		err := store.SaveJob(&tc.Job)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	//start and close Notifier

@@ -345,11 +345,18 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 // perform downloads the resource denoted by j.URL and updates its state in
 // Redis accordingly. It may retry downloading on certain errors.
 func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
-	wp.markJobInProgress(j)
+	err := wp.markJobInProgress(j)
+	if err != nil {
+		wp.log.Printf("perform: Error marking job as in-progress: %s", err)
+		return
+	}
 
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
-		wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
+		err = wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
+		if err != nil {
+			wp.log.Printf("perform: Error marking job as failed: %s", err)
+		}
 		return
 	}
 
@@ -363,16 +370,22 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 			}
 			err = wp.p.Storage.QueuePendingCallback(j)
 			if err != nil {
-				wp.log.Printf("Failed scheduling callback: %s", err)
+				wp.log.Printf("perform: Error queueing pending callback: %s", err)
 			}
 			return
 		}
-		wp.requeueOrFail(j, err.Error())
+		err = wp.requeueOrFail(j, err.Error())
+		if err != nil {
+			wp.log.Printf("perform: Error requeueing callback: %s", err)
+		}
 		return
 	}
 
 	if resp.StatusCode >= http.StatusInternalServerError {
-		wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
+		err = wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
+		if err != nil {
+			wp.log.Printf("Failed requeueing callback: %s", err)
+		}
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		err = wp.markJobFailed(j, fmt.Sprintf("Received status code %d", resp.StatusCode))
@@ -389,14 +402,20 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	out, err := os.Create(wp.p.StorageDir + j.ID)
 	if err != nil {
-		wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
+		err = wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
+		if err != nil {
+			wp.log.Printf("Error requeueing callback: %s", err)
+		}
 		return
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		wp.requeueOrFail(j, fmt.Sprintf("Could not download file, %v", err))
+		err = wp.requeueOrFail(j, fmt.Sprintf("Could not download file, %v", err))
+		if err != nil {
+			wp.log.Printf("Error requeueing callback: %s", err)
+		}
 		return
 	}
 
