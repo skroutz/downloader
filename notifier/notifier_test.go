@@ -16,10 +16,15 @@ var (
 	Redis    = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	cbServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}))
+	store *storage.Storage
 )
 
 func init() {
 	err := Redis.FlushDB().Err()
+	if err != nil {
+		log.Fatal(err)
+	}
+	store, err = storage.New(Redis)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,19 +53,15 @@ func TestNotifyJobDeletion(t *testing.T) {
 			CallbackURL:   "http://localhost:39871/nonexistent"}, true},
 	}
 
-	st, err := storage.New(Redis)
-	if err != nil {
-		t.Fatal(err)
-	}
-	notifier := New(st, 10)
+	notifier := New(store, 10)
 
 	for _, tc := range testcases {
-		err = st.QueuePendingCallback(tc.j)
+		err := store.QueuePendingCallback(tc.j)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		exists, err := st.JobExists(tc.j)
+		exists, err := store.JobExists(tc.j)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,12 +71,57 @@ func TestNotifyJobDeletion(t *testing.T) {
 
 		notifier.Notify(tc.j)
 
-		exists, err = st.JobExists(tc.j)
+		exists, err = store.JobExists(tc.j)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if exists != tc.shouldExist {
 			t.Fatalf("Expected job exist to be %v", tc.shouldExist)
+		}
+	}
+}
+
+func TestRogueCollection(t *testing.T) {
+	notifier := New(store, 10)
+
+	testcases := []struct {
+		Job           job.Job
+		expectedState job.State
+	}{
+		{
+			job.Job{
+				ID:            "RogueOne",
+				CallbackState: job.StateInProgress,
+			},
+			job.StatePending,
+		},
+		{
+			job.Job{
+				ID:            "Valid",
+				CallbackState: job.StateFailed,
+			},
+			job.StateFailed,
+		},
+	}
+
+	for _, tc := range testcases {
+		store.SaveJob(&tc.Job)
+	}
+
+	//start and close Notifier
+	ch := make(chan struct{})
+	go notifier.Start(ch)
+	ch <- struct{}{}
+	<-ch
+
+	for _, tc := range testcases {
+		j, err := store.GetJob(tc.Job.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if j.CallbackState != tc.expectedState {
+			t.Fatalf("Expected job state %s, found %s", tc.expectedState, j.DownloadState)
 		}
 	}
 }

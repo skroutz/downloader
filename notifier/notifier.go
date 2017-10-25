@@ -69,6 +69,9 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 		}()
 	}
 
+	// Check Redis for jobs left in InProgress state
+	n.collectRogueCallbacks()
+
 	for {
 		select {
 		case <-closeChan:
@@ -89,6 +92,49 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 			n.cbChan <- job
 		}
 	}
+}
+
+// collectRogueCallbacks Scans Redis for jobs that have InProgress CallbackState.
+// This indicates they are leftover from an interrupted previous run and should get requeued.
+func (n *Notifier) collectRogueCallbacks() {
+	var cursor uint64
+	var rogueCount uint64
+
+	for {
+		var keys []string
+		var err error
+		keys, cursor, err = n.Storage.Redis.Scan(cursor, storage.JobKeyPrefix+"*", 50).Result()
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		for _, jobID := range keys {
+			strCmd := n.Storage.Redis.HGet(jobID, "CallbackState")
+			if strCmd.Err() != nil {
+				log.Println(strCmd.Err())
+				continue
+			}
+			if job.State(strCmd.Val()) == job.StateInProgress {
+				jb, err := n.Storage.GetJob(strings.TrimPrefix(jobID, storage.JobKeyPrefix))
+				if err != nil {
+					log.Printf("Could not get job for Redis: %v", err)
+					continue
+				}
+				err = n.Storage.QueuePendingCallback(&jb)
+				if err != nil {
+					log.Printf("Could not queue job for download: %v", err)
+					continue
+				}
+				rogueCount++
+			}
+		}
+
+		if cursor == 0 {
+			break
+		}
+	}
+	log.Printf("Queued %d Rogue Callbacks", rogueCount)
 }
 
 // Notify posts callback info to j.CallbackURL
