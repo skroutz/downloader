@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -27,8 +28,8 @@ import (
 type testJob map[string]interface{}
 
 var (
-	mu           sync.Mutex
-	originalArgs = make([]string, len(os.Args))
+	mu         sync.Mutex
+	testBinary = os.Args[0:1]
 
 	componentsWg sync.WaitGroup
 
@@ -59,8 +60,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	// initialize global variables
-	copy(originalArgs, os.Args)
+	flag.Parse()
 
 	flushRedis()
 
@@ -92,7 +92,7 @@ func TestMain(m *testing.M) {
 	componentsWg.Add(1)
 	go start("processor")
 	// circumvent race conditions with os.Args
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	componentsWg.Add(1)
 	go start("notifier")
@@ -113,7 +113,7 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Shutting down API, Processor & Notifier..")
+	log.Println("Shutting down API, Processor & Notifier..")
 	sigCh <- os.Interrupt // shutdown APIServer
 	sigCh <- os.Interrupt // shutdown Processor
 	sigCh <- os.Interrupt // shutdown Notifier
@@ -387,13 +387,11 @@ func TestLoad(t *testing.T) {
 	wg.Wait()
 }
 
-// executes main() with the provided args.
+// executes main() with the provided args. Strips all existing args that may
+// be test arguments or arguments to build
 func start(args ...string) {
-	// TODO: maybe locking is not needed
-	// especially if we start the processes sequentially
 	mu.Lock()
-	os.Args = originalArgs
-	os.Args = append(os.Args, args...)
+	os.Args = append(testBinary, args...)
 	mu.Unlock()
 
 	main()
