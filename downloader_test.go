@@ -187,7 +187,7 @@ FILECHECK:
 		case <-time.After(timeout):
 			t.Fatal("File not present on the download location after 5 seconds")
 		default:
-			filePath := path.Join(cfg.Processor.StorageDir, downloadURI.Path)
+			filePath := path.Join(cfg.Processor.StorageDir, path.Base(downloadURI.Path))
 			downloaded, err = os.Open(filePath)
 			if err == nil {
 				downloadedFileStat, err := downloaded.Stat()
