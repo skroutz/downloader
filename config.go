@@ -15,6 +15,7 @@ type Config struct {
 	} `json:"processor"`
 
 	Notifier struct {
-		Concurrency int `json:"concurrency"`
+		DownloadURL string `json:"download_url"`
+		Concurrency int    `json:"concurrency"`
 	} `json:"notifier"`
 }
