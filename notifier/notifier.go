@@ -236,6 +236,6 @@ func (n *Notifier) markCbInProgress(j *job.Job) error {
 func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
 	j.CallbackState = job.StateFailed
 	j.CallbackMeta = strings.Join(meta, "\n")
-	n.Log.Printf("Failed callback to %s for job id %s", j.CallbackURL, j.ID)
+	n.Log.Printf("Callback failed: {%s, %s}, destination %s", j.ID, j.AggrID, j.CallbackURL)
 	return n.Storage.SaveJob(j)
 }
