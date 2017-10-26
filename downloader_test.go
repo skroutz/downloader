@@ -130,7 +130,7 @@ func TestResourceExists(t *testing.T) {
 
 	// Test job creation (APIServer)
 	jobData := testJob{
-		"aggr_id":      "asemas",
+		"aggr_id":      "aggrFOO",
 		"aggr_limit":   1,
 		"url":          downloadURL("sample-1.jpg"),
 		"callback_url": callbackURL(),
