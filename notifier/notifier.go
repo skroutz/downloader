@@ -30,6 +30,7 @@ type CallbackInfo struct {
 // provided callback URLs.
 type Notifier struct {
 	Storage *storage.Storage
+	Log     *log.Logger
 
 	// TODO: These should be exported
 	concurrency int
@@ -40,9 +41,10 @@ type Notifier struct {
 // NewNotifier takes the concurrency of the notifier as an argument
 //
 // TODO: check concurrency is > 0
-func New(s *storage.Storage, concurrency int) Notifier {
+func New(s *storage.Storage, concurrency int, logger *log.Logger) Notifier {
 	return Notifier{
 		Storage:     s,
+		Log:         logger,
 		concurrency: concurrency,
 		client: &http.Client{
 			Transport: &http.Transport{
@@ -63,7 +65,10 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 		go func() {
 			defer wg.Done()
 			for job := range n.cbChan {
-				n.Notify(&job)
+				err := n.Notify(&job)
+				if err != nil {
+					n.Log.Printf("Notify error: %s", err)
+				}
 			}
 
 		}()
@@ -88,7 +93,7 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 				case storage.ErrRetryLater:
 					// noop
 				default:
-					log.Println(err)
+					n.Log.Println(err)
 				}
 
 				time.Sleep(time.Second)
@@ -110,25 +115,25 @@ func (n *Notifier) collectRogueCallbacks() {
 		var err error
 		keys, cursor, err = n.Storage.Redis.Scan(cursor, storage.JobKeyPrefix+"*", 50).Result()
 		if err != nil {
-			log.Println(err)
+			n.Log.Println(err)
 			break
 		}
 
 		for _, jobID := range keys {
 			strCmd := n.Storage.Redis.HGet(jobID, "CallbackState")
 			if strCmd.Err() != nil {
-				log.Println(strCmd.Err())
+				n.Log.Println(strCmd.Err())
 				continue
 			}
 			if job.State(strCmd.Val()) == job.StateInProgress {
 				jb, err := n.Storage.GetJob(strings.TrimPrefix(jobID, storage.JobKeyPrefix))
 				if err != nil {
-					log.Printf("Could not get job for Redis: %v", err)
+					n.Log.Printf("Could not get job for Redis: %v", err)
 					continue
 				}
 				err = n.Storage.QueuePendingCallback(&jb)
 				if err != nil {
-					log.Printf("Could not queue job for download: %v", err)
+					n.Log.Printf("Could not queue job for download: %v", err)
 					continue
 				}
 				rogueCount++
@@ -139,24 +144,29 @@ func (n *Notifier) collectRogueCallbacks() {
 			break
 		}
 	}
-	log.Printf("Queued %d Rogue Callbacks", rogueCount)
+
+	if rogueCount > 0 {
+		n.Log.Printf("Queued %d rogue callbacks", rogueCount)
+	}
 }
 
 // Notify posts callback info to j.CallbackURL
-func (n *Notifier) Notify(j *job.Job) {
+func (n *Notifier) Notify(j *job.Job) error {
 	j.CallbackCount++
-	n.markCbInProgress(j)
+
+	err := n.markCbInProgress(j)
+	if err != nil {
+		return err
+	}
 
 	cbInfo, err := getCallbackInfo(j)
 	if err != nil {
-		n.markCbFailed(j, err.Error())
-		return
+		return n.markCbFailed(j, err.Error())
 	}
 
 	cb, err := json.Marshal(cbInfo)
 	if err != nil {
-		n.markCbFailed(j, err.Error())
-		return
+		return n.markCbFailed(j, err.Error())
 	}
 
 	res, err := n.client.Post(j.CallbackURL, "application/json", bytes.NewBuffer(cb))
@@ -164,11 +174,10 @@ func (n *Notifier) Notify(j *job.Job) {
 		if err == nil {
 			err = fmt.Errorf("Received Status: %s", res.Status)
 		}
-		n.retryOrFail(j, err.Error())
-		return
+		return n.retryOrFail(j, err.Error())
 	}
 
-	n.Storage.RemoveJob(j.ID)
+	return n.Storage.RemoveJob(j.ID)
 }
 
 // retryOrFail checks the callback count of the current download
