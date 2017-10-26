@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -403,7 +404,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	}
 	defer resp.Body.Close()
 
-	out, err := os.Create(wp.p.StorageDir + j.ID)
+	out, err := os.Create(path.Join(wp.p.StorageDir, j.ID))
 	if err != nil {
 		err = wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
 		if err != nil {
