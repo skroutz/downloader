@@ -5,6 +5,28 @@ Async Rate-limited downloader https://phabricator.skroutz.gr/w/arch/downloader_d
 See the [doc folder](doc/) for documentation.
 
 
+API
+-------------------------------------------------------------------------------
+
+Enqueueing a new download job:
+```shell
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar"}'
+{"id":"NSb4FOAs9fVaQw"}
+```
+
+Callback requests:
+```shell
+$ nc -l 8080
+
+POST / HTTP/1.1
+Host: localhost:8080
+User-Agent: Go-http-client/1.1
+Content-Length: 93
+Content-Type: application/json
+Accept-Encoding: gzip
+
+{"success":true,"error":"","extra":"foobar","download_url":"http://localhost/NSb4FOAs9fVaQw"}
+```
 
 
 
