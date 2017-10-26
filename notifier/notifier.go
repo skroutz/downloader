@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -29,8 +31,9 @@ type CallbackInfo struct {
 // and notifying back the respective users by issuing HTTP requests to their
 // provided callback URLs.
 type Notifier struct {
-	Storage *storage.Storage
-	Log     *log.Logger
+	Storage     *storage.Storage
+	Log         *log.Logger
+	DownloadURL *url.URL
 
 	// TODO: These should be exported
 	concurrency int
@@ -41,7 +44,12 @@ type Notifier struct {
 // NewNotifier takes the concurrency of the notifier as an argument
 //
 // TODO: check concurrency is > 0
-func New(s *storage.Storage, concurrency int, logger *log.Logger) Notifier {
+func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string) (Notifier, error) {
+	url, err := url.ParseRequestURI(dwnlURL)
+	if err != nil {
+		return Notifier{}, fmt.Errorf("Could not parse Download URL, %v", err)
+	}
+
 	return Notifier{
 		Storage:     s,
 		Log:         logger,
@@ -52,8 +60,9 @@ func New(s *storage.Storage, concurrency int, logger *log.Logger) Notifier {
 			},
 			Timeout: time.Duration(3) * time.Second,
 		},
-		cbChan: make(chan job.Job),
-	}
+		cbChan:      make(chan job.Job),
+		DownloadURL: url,
+	}, nil
 }
 
 // Start starts the Notifier loop and instruments the worker goroutines that
@@ -159,7 +168,7 @@ func (n *Notifier) Notify(j *job.Job) error {
 		return err
 	}
 
-	cbInfo, err := getCallbackInfo(j)
+	cbInfo, err := n.getCallbackInfo(j)
 	if err != nil {
 		return n.markCbFailed(j, err.Error())
 	}
@@ -192,7 +201,7 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 
 // callbackInfo validates that the job is good for callback and
 // return callbackInfo to the caller
-func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
+func (n *Notifier) getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 	if j.DownloadState != job.StateSuccess && j.DownloadState != job.StateFailed {
 		return CallbackInfo{}, fmt.Errorf("Invalid job download state: '%s'", j.DownloadState)
 	}
@@ -201,18 +210,18 @@ func getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 		Success:     j.DownloadState == job.StateSuccess,
 		Error:       j.DownloadMeta,
 		Extra:       j.Extra,
-		DownloadURL: jobDownloadURL(j),
+		DownloadURL: jobDownloadURL(j, *n.DownloadURL),
 	}, nil
 }
 
-// downloadURL constructs the actual download URL to be provided to the user.
-//
-// TODO: Actually make it smart
-func jobDownloadURL(j *job.Job) string {
+// jobdownloadURL constructs the actual download URL to be provided to the user.
+func jobDownloadURL(j *job.Job, downloadURL url.URL) string {
 	if j.DownloadState != job.StateSuccess {
 		return ""
 	}
-	return fmt.Sprintf("http://localhost/%s", j.ID)
+
+	downloadURL.Path = path.Join(downloadURL.Path, j.ID)
+	return downloadURL.String()
 }
 
 func (n *Notifier) markCbInProgress(j *job.Job) error {

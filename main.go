@@ -140,7 +140,10 @@ func main() {
 					return err
 				}
 				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
-				notifier := notifier.New(storage, cfg.Notifier.Concurrency, logger)
+				notifier, err := notifier.New(storage, cfg.Notifier.Concurrency, logger, cfg.Notifier.DownloadURL)
+				if err != nil {
+					logger.Fatal(err)
+				}
 
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan)

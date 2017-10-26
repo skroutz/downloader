@@ -30,7 +30,6 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 func TestNotifyJobDeletion(t *testing.T) {
@@ -55,7 +54,10 @@ func TestNotifyJobDeletion(t *testing.T) {
 			CallbackURL:   "http://localhost:39871/nonexistent"}, true},
 	}
 
-	notifier := New(store, 10, logger)
+	notifier, err := New(store, 10, logger, "http://blah.com/")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range testcases {
 		err := store.QueuePendingCallback(tc.j)
@@ -87,7 +89,10 @@ func TestNotifyJobDeletion(t *testing.T) {
 }
 
 func TestRogueCollection(t *testing.T) {
-	notifier := New(store, 10, logger)
+	notifier, err := New(store, 10, logger, "http://blah.com/")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	testcases := []struct {
 		Job           job.Job
