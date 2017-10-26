@@ -1,0 +1,12 @@
+[Unit]
+Description=Downloader Server (%i)
+
+[Service]
+User=downloader
+Group=downloader
+ExecStart=/usr/local/lib/downloader/bin/downloader %i -c /etc/downloader/config.json
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+
