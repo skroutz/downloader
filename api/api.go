@@ -116,13 +116,17 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.StatusInternalServerError)
 			return
 		}
+		as.Log.Println("Created aggregation", *aggr)
 	}
 
-	if err = as.Storage.QueuePendingDownload(j); err != nil {
+	err = as.Storage.QueuePendingDownload(j)
+	if err != nil {
 		http.Error(w, "Error queuing download: "+err.Error(),
 			http.StatusInternalServerError)
 		return
 	}
+	as.Log.Println("Enqueued job with id", j.ID)
+
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
 
