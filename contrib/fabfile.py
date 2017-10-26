@@ -12,7 +12,7 @@ from fabric.decorators import runs_once
 
 @runs_once
 def build():
-    local('go build -o downloader')
+    local('GOARCH=amd64 GOOS=linux go build -o downloader')
 
 def copy():
     put('downloader', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
