@@ -3,7 +3,6 @@ package job
 import (
 	"encoding/json"
 	"errors"
-	"log"
 )
 
 // Aggregation is the concept through which the rate limit rules are defined
@@ -30,7 +29,6 @@ func (a *Aggregation) UnmarshalJSON(b []byte) error {
 
 	err := json.Unmarshal(b, &tmp)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 

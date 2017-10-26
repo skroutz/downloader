@@ -9,7 +9,7 @@
 		"storage_dir":"/tmp/"
 	},
 	"notifier": {
-		"download_url": "http://localhost/",
+		"download_url": "http://localhost/foo",
 		"concurrency": 10
 	}
 }

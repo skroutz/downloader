@@ -1,5 +1,11 @@
 package job
 
+import (
+	"encoding/json"
+	"errors"
+	"net/url"
+)
+
 const (
 	// The available states of a job's DownloadState/CallbackState.
 	StatePending    = "Pending"
@@ -57,4 +63,49 @@ type State string
 // MarshalBinary is used by redis driver to marshall custom type State
 func (s State) MarshalBinary() (data []byte, err error) {
 	return []byte(string(s)), nil
+}
+
+func (j *Job) UnmarshalJSON(b []byte) error {
+	var tmp map[string]interface{}
+
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+
+	dlURL, ok := tmp["url"].(string)
+	if !ok {
+		return errors.New("URL must be a string")
+	}
+	_, err = url.ParseRequestURI(dlURL)
+	if err != nil {
+		return errors.New("Could not parse URL: " + err.Error())
+	}
+	j.URL = dlURL
+
+	aggrID, ok := tmp["aggr_id"].(string)
+	if !ok {
+		return errors.New("aggr_id must be a string")
+	}
+	if aggrID == "" {
+		return errors.New("aggr_id cannot be empty")
+	}
+	j.AggrID = aggrID
+
+	cbURL, ok := tmp["callback_url"].(string)
+	if !ok {
+		return errors.New("callback_url must be a string")
+	}
+	_, err = url.ParseRequestURI(cbURL)
+	if err != nil {
+		return errors.New("Could not parse callback URL: " + err.Error())
+	}
+	j.CallbackURL = cbURL
+
+	extra, ok := tmp["extra"].(string)
+	if ok {
+		j.Extra = extra
+	}
+
+	return nil
 }
