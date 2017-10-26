@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -42,12 +43,14 @@ type Notifier struct {
 }
 
 // NewNotifier takes the concurrency of the notifier as an argument
-//
-// TODO: check concurrency is > 0
 func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string) (Notifier, error) {
 	url, err := url.ParseRequestURI(dwnlURL)
 	if err != nil {
 		return Notifier{}, fmt.Errorf("Could not parse Download URL, %v", err)
+	}
+
+	if concurrency <= 0 {
+		return Notifier{}, errors.New("Notifier Concurrency must be a positive number")
 	}
 
 	return Notifier{
