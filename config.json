@@ -7,7 +7,7 @@
 	},
 	"processor": {
 		"storage_dir":"/tmp/",
-    "user_agent": "Skroutz ImageBot v1"
+    "user_agent": "Downloader v1"
 	},
 	"notifier": {
 		"download_url": "http://localhost/foo",
