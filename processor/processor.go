@@ -102,7 +102,7 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, client *
 	// verify we can write to storageDir
 	//
 	// TODO: create an error type to wrap these errors
-	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
+	tmpf, err := ioutil.TempFile(storageDir, "write-check-")
 	if err != nil {
 		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
 	}
