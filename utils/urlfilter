@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+#
+# Reads URLs from stdin and outputs them to stdout after reducing them to the
+# count denoted by the first argument. The default count is 1.
+#
+# If a [url-override] is provided, it will override URLs passed by STDIN.
+#
+# Usage:
+#
+#   $ urlfilter [count-per-aggregation] [url-override]
+#
+# Example:
+#
+#   $ cat urls.txt | urlfilter 100 http://foo.bar
+#
+require "uri"
+
+URLS = Hash.new(0)
+override = ARGV[1] ? ARGV[1] : nil
+
+STDIN.each do |line|
+  line.chomp!
+
+  begin
+    uri = URI(line)
+  rescue => e
+    STDERR.puts "Skipping #{line}"
+    next
+  end
+
+  next if !uri.absolute? || !uri.host
+
+  aggr_id = uri.host
+
+  if URLS[aggr_id] < (Integer(ARGV[0]) || 1)
+    URLS[aggr_id] += 1
+    STDOUT.puts(override || line)
+  end
+end
+
