@@ -1,31 +1,3 @@
-package processor
-
-import (
-	"context"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-	"path"
-	"path/filepath"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-
-	"golang.skroutz.gr/skroutz/downloader/job"
-	"golang.skroutz.gr/skroutz/downloader/storage"
-)
-
-// TODO: these should all be configuration options provided by the caller
-const (
-	workerMaxInactivity = 5 * time.Second
-	backoffDuration     = 1 * time.Second
-	maxDownloadRetries  = 3
-)
-
 // Processor is one of the core entities of the downloader. It facilitates the
 // processing of Jobs.
 // Its main responsibility is to manage the creation and destruction of
@@ -56,6 +28,35 @@ const (
 // When a shutdown signal is received from the application it propagates from
 // the processor to the active worker pools, stopping any in-progress jobs and
 // gracefully shutting down the corresponding workers.
+package processor
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/storage"
+)
+
+// TODO: these should all be configuration options provided by the caller
+const (
+	workerMaxInactivity = 5 * time.Second
+	backoffDuration     = 1 * time.Second
+	maxDownloadRetries  = 3
+)
+
 type Processor struct {
 	Storage *storage.Storage
 
@@ -95,26 +96,29 @@ type workerPool struct {
 
 // New initializes and returns a Processor, or an error if storageDir
 // is not writable.
-func New(storage *storage.Storage, scanInterval int, storageDir string, client *http.Client,
-	logger *log.Logger) (Processor, error) {
+//
+// TODO: only add REQUIRED arguments, the rest should be set from the struct
+func New(storage *storage.Storage, scanInterval int, storageDir string, client *http.Client, logger *log.Logger) (Processor, error) {
 	// verify we can write to storageDir
+	//
+	// TODO: create an error type to wrap these errors
 	tmpf, err := ioutil.TempFile(storageDir, "downloader-")
 	if err != nil {
-		return Processor{}, err
+		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
 	}
 	_, err = tmpf.Write([]byte("a"))
 	if err != nil {
 		tmpf.Close()
 		os.Remove(tmpf.Name())
-		return Processor{}, err
+		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
 	}
 	err = tmpf.Close()
 	if err != nil {
-		return Processor{}, err
+		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
 	}
 	err = os.Remove(tmpf.Name())
 	if err != nil {
-		return Processor{}, err
+		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
 	}
 
 	return Processor{
@@ -157,7 +161,7 @@ PROCESSOR_LOOP:
 				var err error
 				keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.JobsKeyPrefix+"*", 50).Result()
 				if err != nil {
-					p.Log.Println(fmt.Errorf("Could not scan keys: %v", err))
+					p.Log.Println(fmt.Errorf("Error scanning keys: %v", err))
 					break
 				}
 
@@ -166,7 +170,7 @@ PROCESSOR_LOOP:
 					if _, ok := p.pools[aggrID]; !ok {
 						aggr, err := p.Storage.GetAggregation(aggrID)
 						if err != nil {
-							p.Log.Printf("Could not get aggregation %s: %v", aggrID, err)
+							p.Log.Printf("Error fetching aggregation with id '%s': %s", aggrID, err)
 							continue
 						}
 						wp := p.newWorkerPool(aggr)
@@ -218,7 +222,7 @@ func (p *Processor) collectRogueDownloads() {
 		var err error
 		keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.JobKeyPrefix+"*", 50).Result()
 		if err != nil {
-			p.Log.Println(err)
+			p.Log.Println("Error scanning Redis for rogue downloads:", err)
 			break
 		}
 
@@ -231,12 +235,12 @@ func (p *Processor) collectRogueDownloads() {
 			if job.State(strCmd.Val()) == job.StateInProgress {
 				jb, err := p.Storage.GetJob(strings.TrimPrefix(jobID, storage.JobKeyPrefix))
 				if err != nil {
-					p.Log.Printf("Could not get job for Redis: %v", err)
+					p.Log.Printf("Error fetching job with id '%s' from Redis: %s", jobID, err)
 					continue
 				}
 				err = p.Storage.QueuePendingDownload(&jb)
 				if err != nil {
-					p.Log.Printf("Could not queue job for download: %v", err)
+					p.Log.Printf("Error queueing job with id '%s' for download: %s", jb.ID, err)
 					continue
 				}
 				rogueCount++
@@ -299,7 +303,6 @@ WORKERPOOL_LOOP:
 		default:
 			job, err := wp.p.Storage.PopJob(&wp.aggr)
 			if err != nil {
-
 				switch err {
 				case storage.ErrEmptyQueue:
 					// Stop the WorkerPool if
@@ -312,7 +315,7 @@ WORKERPOOL_LOOP:
 				case storage.ErrRetryLater:
 					// noop
 				default:
-					wp.log.Println(err)
+					wp.log.Println("Error popping job from Redis:", err)
 				}
 
 				// backoff & wait for workers to finish or a job to be queued
@@ -372,6 +375,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
+		wp.log.Printf("perform: Error initializing request to %s", j.URL)
 		err = wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
 		if err != nil {
 			wp.log.Printf("perform: Error marking job as failed: %s", err)
@@ -383,22 +387,23 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	}
 
 	j.DownloadCount++
+	wp.log.Println("Requesting", j.URL, "...")
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
 			err = wp.markJobFailed(j, fmt.Sprintf("TLS Error occured: %s", err))
 			if err != nil {
-				wp.log.Println(err)
+				wp.log.Println("perform: Error marking job failed:", err)
 			}
 			err = wp.p.Storage.QueuePendingCallback(j)
 			if err != nil {
-				wp.log.Printf("perform: Error queueing pending callback: %s", err)
+				wp.log.Println("perform: Error queueing pending callback:", err)
 			}
 			return
 		}
 		err = wp.requeueOrFail(j, err.Error())
 		if err != nil {
-			wp.log.Printf("perform: Error requeueing callback: %s", err)
+			wp.log.Println("perform: Error requeueing callback:", err)
 		}
 		return
 	}
@@ -406,17 +411,17 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	if resp.StatusCode >= http.StatusInternalServerError {
 		err = wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		if err != nil {
-			wp.log.Printf("Failed requeueing callback: %s", err)
+			wp.log.Println("perform: Error requeueing callback:", err)
 		}
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		err = wp.markJobFailed(j, fmt.Sprintf("Received status code %d", resp.StatusCode))
 		if err != nil {
-			wp.log.Println(err)
+			wp.log.Println("perform: Error marking job failed:", err)
 		}
 		err = wp.p.Storage.QueuePendingCallback(j)
 		if err != nil {
-			wp.log.Printf("Failed scheduling callback: %s", err)
+			wp.log.Println("perform: Error scheduling callback:", err)
 		}
 		return
 	}
@@ -424,9 +429,10 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	out, err := wp.p.storageFile(j)
 	if err != nil {
+		wp.log.Println("perform: Error creating download file:", err)
 		err = wp.requeueOrFail(j, fmt.Sprintf("Could not create/write to file, %v", err))
 		if err != nil {
-			wp.log.Printf("Error requeueing callback: %s", err)
+			wp.log.Println("perform: Error requeueing callback:", err)
 		}
 		return
 	}
@@ -434,22 +440,23 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		err = wp.requeueOrFail(j, fmt.Sprintf("Could not download file, %v", err))
+		wp.log.Println("perform: Error writing to download file:", err)
+		err = wp.requeueOrFail(j, fmt.Sprintf("Error writing to download file: %s", err))
 		if err != nil {
-			wp.log.Printf("Error requeueing callback: %s", err)
+			wp.log.Println("perform: Error requeueing callback:", err)
 		}
 		return
 	}
 
 	err = wp.markJobSuccess(j)
 	if err != nil {
-		wp.log.Println(err)
+		wp.log.Println("perform: Error marking job successful:", err)
 		return
 	}
 
 	err = wp.p.Storage.QueuePendingCallback(j)
 	if err != nil {
-		wp.log.Printf("Failed scheduling callback: %s", err)
+		wp.log.Println("perform: Error scheduling callback:", err)
 	}
 }
 

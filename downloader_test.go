@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -440,7 +439,7 @@ func postJob(job testJob) error {
 	if resp.StatusCode != 201 {
 		info, _ := httputil.DumpResponse(resp, true)
 		log.Println(string(info))
-		return errors.New(fmt.Sprintf("Expected 201 response, got %d", resp.StatusCode))
+		return fmt.Errorf("Expected 201 response, got %d", resp.StatusCode)
 	}
 	return nil
 }
