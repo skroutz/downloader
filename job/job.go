@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"path"
 )
 
 const (
@@ -63,6 +64,11 @@ type State string
 // MarshalBinary is used by redis driver to marshall custom type State
 func (s State) MarshalBinary() (data []byte, err error) {
 	return []byte(string(s)), nil
+}
+
+// Path returns the relative job path
+func (j *Job) Path() string {
+	return path.Join(string(j.ID[0:3]), j.ID)
 }
 
 func (j *Job) UnmarshalJSON(b []byte) error {
