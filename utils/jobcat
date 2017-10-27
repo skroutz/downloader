@@ -1,31 +1,31 @@
 #!/usr/bin/env ruby
 #
+# Reads URLs from STDIN and submits them as download jobs to a downloader
+#
 # Usage:
 #
-#   $ cat foo.log | ./compare <request-limit> [request-offset]
+#   $ jobcat [downloader-endpoint] [aggregation-limit]
 #
 # Example:
 #
-#   $ cat foo.log | ./compare 1000
+#   $ cat urls.txt | jobcat http://downloader.foo/download 5
+#
 require "json"
 require "net/http"
 
-DOWNLOADER = URI(ENV["DOWNLOADER_ENDPOINT"])
-AGGR_LIMIT = Integer(ENV["AGGR_LIMIT"])
+DOWNLOADER = URI(ARGV[0])
+AGGR_LIMIT = Integer(ARGV[1])
 
 raise "Nothing passed to STDIN" if STDIN.tty?
-
-trap("SIGINT") {
-  puts "Exit signal caught! Exiting."
-  abort
-}
-
-require "pry"
-require "pry-byebug"
 
 i = 0
 success = 0
 error = 0
+
+trap("SIGINT") {
+  puts "Total requests: #{i} | Successful: #{success} | Error: #{error}"
+  abort
+}
 
 Net::HTTP.start(DOWNLOADER.host, DOWNLOADER.port) do |http|
   STDIN.each do |line|
@@ -45,12 +45,13 @@ Net::HTTP.start(DOWNLOADER.host, DOWNLOADER.port) do |http|
       next
     end
 
-    print "Enqueueing job ##{i} ... "
+    aggr_id = download_uri.host
+    print "Enqueueing job ##{i} for #{aggr_id} ... "
 
-    req = Net::HTTP::Post.new(DOWNLOADER, "Content-Type" => "application/json")
+    req = Net::HTTP::Post.new(DOWNLOADER, "Content-Type" => "application/json", "X-Aggr" => aggr_id)
     req.body = {
-      aggr_id: download_uri, aggr_limit: AGGR_LIMIT,
-      url: download_uri, callback_url: "http://localhost:8080",
+	    aggr_id: aggr_id, aggr_limit: AGGR_LIMIT,
+      url: download_uri, callback_url: "http://localhost/callback",
       extra: Time.now.to_s
     }.to_json
 
@@ -60,10 +61,10 @@ Net::HTTP.start(DOWNLOADER.host, DOWNLOADER.port) do |http|
       success += 1
       print "OK!\n"
     else
+	    print "#{res.code}: #{res.body}\n"
       error += 1
     end
   end
 end
 
 puts "Total requests: #{i} | Successful: #{success} | Error: #{error}"
-
