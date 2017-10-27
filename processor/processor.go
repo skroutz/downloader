@@ -369,16 +369,16 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	err := wp.markJobInProgress(j)
 	if err != nil {
-		wp.log.Printf("perform: Error marking job as in-progress: %s", err)
+		wp.log.Printf("perform: Error marking %s as in-progress: %s", j, err)
 		return
 	}
 
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
-		wp.log.Printf("perform: Error initializing request to %s", j.URL)
+		wp.log.Printf("perform: Error initializing download request for %s: %s", j, err)
 		err = wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
 		if err != nil {
-			wp.log.Printf("perform: Error marking job as failed: %s", err)
+			wp.log.Printf("perform: Error marking %s as failed: %s", j, err)
 		}
 		return
 	}
@@ -387,23 +387,23 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	}
 
 	j.DownloadCount++
-	wp.log.Println("Requesting", j.URL, "...")
+	wp.log.Println("Performing request for", j, "...")
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
 			err = wp.markJobFailed(j, fmt.Sprintf("TLS Error occured: %s", err))
 			if err != nil {
-				wp.log.Println("perform: Error marking job failed:", err)
+				wp.log.Printf("perform: Error marking %s failed: %s", j, err)
 			}
 			err = wp.p.Storage.QueuePendingCallback(j)
 			if err != nil {
-				wp.log.Println("perform: Error queueing pending callback:", err)
+				wp.log.Printf("perform: Error queueing callback for %s: %s", j, err)
 			}
 			return
 		}
 		err = wp.requeueOrFail(j, err.Error())
 		if err != nil {
-			wp.log.Println("perform: Error requeueing callback:", err)
+			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
 		}
 		return
 	}
@@ -411,17 +411,17 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	if resp.StatusCode >= http.StatusInternalServerError {
 		err = wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		if err != nil {
-			wp.log.Println("perform: Error requeueing callback:", err)
+			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
 		}
 		return
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		err = wp.markJobFailed(j, fmt.Sprintf("Received status code %d", resp.StatusCode))
 		if err != nil {
-			wp.log.Println("perform: Error marking job failed:", err)
+			wp.log.Printf("perform: Error marking %s failed: %s", j, err)
 		}
 		err = wp.p.Storage.QueuePendingCallback(j)
 		if err != nil {
-			wp.log.Println("perform: Error scheduling callback:", err)
+			wp.log.Printf("perform: Error queueing callback for %s: %s", j, err)
 		}
 		return
 	}
@@ -429,10 +429,10 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	out, err := wp.p.storageFile(j)
 	if err != nil {
-		wp.log.Println("perform: Error creating download file:", err)
+		wp.log.Printf("perform: Error creating download file for %s: %s", j, err)
 		err = wp.requeueOrFail(j, fmt.Sprintf("Could not create/write to file, %v", err))
 		if err != nil {
-			wp.log.Println("perform: Error requeueing callback:", err)
+			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
 		}
 		return
 	}
@@ -440,28 +440,28 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		wp.log.Println("perform: Error writing to download file:", err)
+		wp.log.Printf("perform: Error writing to download file for %s: %s", j, err)
 		err = wp.requeueOrFail(j, fmt.Sprintf("Error writing to download file: %s", err))
 		if err != nil {
-			wp.log.Println("perform: Error requeueing callback:", err)
+			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
 		}
 		return
 	}
 
 	err = out.Sync()
 	if err != nil {
-		wp.log.Println("perform: Error syncing download file:", err)
+		wp.log.Printf("perform: Error syncing download file for %s: %s", j, err)
 	}
 
 	err = wp.markJobSuccess(j)
 	if err != nil {
-		wp.log.Println("perform: Error marking job successful:", err)
+		wp.log.Printf("perform: Error marking %s successful: %s", j, err)
 		return
 	}
 
 	err = wp.p.Storage.QueuePendingCallback(j)
 	if err != nil {
-		wp.log.Println("perform: Error scheduling callback:", err)
+		wp.log.Printf("perform: Error scheduling callback for %s:", j, err)
 	}
 }
 

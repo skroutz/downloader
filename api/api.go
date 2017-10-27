@@ -72,7 +72,8 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	j := new(job.Job)
 	err = json.Unmarshal(body, j)
 	if err != nil {
-		http.Error(w, "Error parsing request: "+err.Error(), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Error unmarshalling body '%s' to Job: %s", body, err),
+			http.StatusBadRequest)
 		return
 	}
 
@@ -81,7 +82,8 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		j.ID = idgen.rand()
 		exists, err := as.Storage.JobExists(j)
 		if err != nil {
-			http.Error(w, "Error queuing download: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Error fetching %s from Redis: %s", j, err),
+				http.StatusInternalServerError)
 			return
 		}
 		if !exists {
@@ -90,7 +92,7 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !foundJID {
-		http.Error(w, "Could not find unique ID after 3 tries. ID: "+j.ID,
+		http.Error(w, fmt.Sprintf("Could not find unique ID after 3 tries for %s", j),
 			http.StatusInternalServerError)
 		return
 	}
@@ -98,34 +100,35 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	aggr := new(job.Aggregation)
 	err = json.Unmarshal(body, aggr)
 	if err != nil {
-		http.Error(w, "Error parsing request: "+err.Error(), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Error unmarshalling body '%s' to Aggregation: %s", body, err),
+			http.StatusBadRequest)
 		return
 	}
 
 	// TODO: do we want to throw error or override the previous aggr?
 	exists, err := as.Storage.AggregationExists(aggr)
 	if err != nil {
-		http.Error(w, "Error queuing download: "+err.Error(),
+		http.Error(w, fmt.Sprintf("Error fetching aggregation for %s: %s", j, err),
 			http.StatusInternalServerError)
 		return
 	}
 	if !exists {
 		err = as.Storage.SaveAggregation(aggr)
 		if err != nil {
-			http.Error(w, "Error queuing download: "+err.Error(),
+			http.Error(w, fmt.Sprintf("Error persisting aggregation for %s: %s", j, err),
 				http.StatusInternalServerError)
 			return
 		}
-		as.Log.Println("Created aggregation", *aggr)
+		as.Log.Printf("Created aggregation %v for %s", *aggr, j)
 	}
 
 	err = as.Storage.QueuePendingDownload(j)
 	if err != nil {
-		http.Error(w, "Error queuing download: "+err.Error(),
+		http.Error(w, fmt.Sprintf("Error queueing %s: %s", j, err),
 			http.StatusInternalServerError)
 		return
 	}
-	as.Log.Println("Enqueued job with id", j.ID)
+	as.Log.Println("Enqueued", j)
 
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
@@ -133,6 +136,6 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := fmt.Sprintf(`{"id":"%s"}`, j.ID)
 	_, err = w.Write([]byte(resp))
 	if err != nil {
-		as.Log.Printf("Error writing response to request body '%s': %s", body, err)
+		as.Log.Printf("Error writing response for %s: %s", j, err)
 	}
 }
