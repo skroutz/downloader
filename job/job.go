@@ -3,6 +3,7 @@ package job
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"path"
 )
@@ -114,4 +115,9 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 	}
 
 	return nil
+}
+
+func (j Job) String() string {
+	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, callback_url:%s}",
+		j.ID, j.AggrID, j.URL, j.CallbackURL)
 }
