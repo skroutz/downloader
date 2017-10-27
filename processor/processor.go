@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -193,6 +194,17 @@ PROCESSOR_LOOP:
 	wpWg.Wait()
 	p.Log.Println("Shutting down...")
 	closeCh <- struct{}{}
+}
+
+func (p *Processor) storageFile(j *job.Job) (*os.File, error) {
+	jobPath := path.Join(p.StorageDir, j.Path())
+
+	err := os.MkdirAll(filepath.Dir(jobPath), os.FileMode(0755))
+	if err != nil {
+		return nil, err
+	}
+
+	return os.Create(jobPath)
 }
 
 // collectRogueDownloads Scans Redis for jobs that have InProgress DownloadState.
@@ -410,9 +422,9 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	}
 	defer resp.Body.Close()
 
-	out, err := os.Create(path.Join(wp.p.StorageDir, j.ID))
+	out, err := wp.p.storageFile(j)
 	if err != nil {
-		err = wp.requeueOrFail(j, fmt.Sprintf("Could not write to file, %v", err))
+		err = wp.requeueOrFail(j, fmt.Sprintf("Could not create/write to file, %v", err))
 		if err != nil {
 			wp.log.Printf("Error requeueing callback: %s", err)
 		}

@@ -223,7 +223,7 @@ func jobDownloadURL(j *job.Job, downloadURL url.URL) string {
 		return ""
 	}
 
-	downloadURL.Path = path.Join(downloadURL.Path, j.ID)
+	downloadURL.Path = path.Join(downloadURL.Path, j.Path())
 	return downloadURL.String()
 }
 
