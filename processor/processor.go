@@ -69,6 +69,9 @@ type Processor struct {
 	// The client that will be used for the download requests
 	Client *http.Client
 
+	// The User-Agent to set in download requests
+	UserAgent string
+
 	Log *log.Logger
 
 	// pools contain the existing worker pools
@@ -362,6 +365,9 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 			wp.log.Printf("perform: Error marking job as failed: %s", err)
 		}
 		return
+	}
+	if wp.p.UserAgent != "" {
+		req.Header.Set("User-Agent", wp.p.UserAgent)
 	}
 
 	j.DownloadCount++
