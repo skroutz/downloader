@@ -108,6 +108,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				processor.UserAgent = cfg.Processor.UserAgent
 
 				closeChan := make(chan struct{})
 				go processor.Start(closeChan)

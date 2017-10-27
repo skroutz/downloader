@@ -6,7 +6,8 @@
 		"heartbeat_path":"/tmp/disable_api"
 	},
 	"processor": {
-		"storage_dir":"/tmp/"
+		"storage_dir":"/tmp/",
+    "user_agent": "Skroutz ImageBot v1"
 	},
 	"notifier": {
 		"download_url": "http://localhost/foo",

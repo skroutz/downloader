@@ -12,6 +12,7 @@ type Config struct {
 
 	Processor struct {
 		StorageDir string `json:"storage_dir"`
+		UserAgent  string `json:"user_agent"`
 	} `json:"processor"`
 
 	Notifier struct {
