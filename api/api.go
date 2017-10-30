@@ -44,12 +44,33 @@ func heartbeat(path string) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
+func (as *API) stats() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		getCmd := as.Storage.Redis.Get("Downloader:Stats:Processor")
+		if getCmd.Err() != nil {
+			http.Error(w, getCmd.Err().Error(), http.StatusInternalServerError)
+			return
+		}
+
+		respbytes, err := getCmd.Bytes()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write(respbytes)
+	}
+
+}
+
 func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	logger *log.Logger) *API {
 	as := &API{Storage: s}
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)
 	mux.HandleFunc("/hb", heartbeat(heartbeatPath))
+	mux.HandleFunc("/stats", as.stats())
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	as.Log = logger
 	return as
