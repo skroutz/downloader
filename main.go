@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -192,5 +193,9 @@ func redisClient(name, addr string) *redis.Client {
 		}
 		return nil
 	}
-	return redis.NewClient(&redis.Options{Addr: addr, OnConnect: setName, MaxRetries: 5})
+	return redis.NewClient(&redis.Options{
+		Addr:       addr,
+		OnConnect:  setName,
+		MaxRetries: 5,
+		PoolSize:   50 * runtime.NumCPU()})
 }
