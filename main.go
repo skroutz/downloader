@@ -99,7 +99,7 @@ func main() {
 
 				client := &http.Client{
 					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
-					Timeout:   time.Duration(3) * time.Second}
+					Timeout:   10 * time.Second}
 				storage, err := storage.New(redisClient("processor", cfg.Redis.Addr))
 				if err != nil {
 					return err
