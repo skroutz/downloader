@@ -48,22 +48,21 @@ func heartbeat(path string) func(http.ResponseWriter, *http.Request) {
 func (as *API) stats() func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := path.Base(r.RequestURI)
-		getCmd := as.Storage.Redis.Get("stats:" + id)
-		if getCmd.Err() != nil {
-			http.Error(w, getCmd.Err().Error(), http.StatusInternalServerError)
-			return
-		}
 
-		respbytes, err := getCmd.Bytes()
+		respbytes, err := as.Storage.GetStats(id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if respbytes == nil {
+			http.Error(w, fmt.Sprintf("Could not find stats for entity %s", id), http.StatusNotFound)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write(respbytes)
 	}
-
 }
 
 func New(s *storage.Storage, host string, port int, heartbeatPath string,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
@@ -32,6 +33,9 @@ const (
 	// TODO: this introduces coupling with the notifier. See how we can
 	// separate it
 	CallbackQueue = "CallbackQueue"
+
+	// Prefix for stats related entries
+	statsPrefix = "stats"
 )
 
 var (
@@ -304,4 +308,23 @@ func (s *Storage) pop(list string) (job.Job, error) {
 	}
 
 	return s.GetJob(jobID)
+}
+
+// GetStats fetches stats prefixed entries from Redis
+func (s *Storage) GetStats(id string) ([]byte, error) {
+	getCmd := s.Redis.Get(strings.Join([]string{statsPrefix, id}, ":"))
+
+	if err := getCmd.Err(); err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return getCmd.Bytes()
+}
+
+// SetStats saves stats in Redis
+func (s *Storage) SetStats(id, stats string) error {
+	return s.Redis.Set(strings.Join([]string{statsPrefix, id}, ":"), stats, 0).Err()
 }

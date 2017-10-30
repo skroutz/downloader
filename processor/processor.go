@@ -159,9 +159,9 @@ func (p *Processor) Start(closeCh chan struct{}) {
 	stats.New(ctx, 5*time.Second,
 		func(m *expvar.Map) {
 			// Store metrics in JSON
-			setCmd := p.Storage.Redis.Set(statsIdentifier, m.String(), 0)
-			if setCmd.Err() != nil {
-				p.Log.Println("Could not report stats", setCmd.Err())
+			err := p.Storage.SetStats("processor", m.String())
+			if err != nil {
+				p.Log.Println("Could not report stats", err)
 			}
 		})
 
