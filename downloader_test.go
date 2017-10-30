@@ -120,11 +120,11 @@ func TestMain(m *testing.M) {
 	waitForServer(apiPort)
 
 	componentsWg.Add(1)
-	processor.QueueBackoffDuration = 500 * time.Millisecond
+	processor.RetryBackoffDuration = 200 * time.Millisecond
 	go start("processor", "--config", testConfig)
 
 	componentsWg.Add(1)
-	notifier.QueueBackoffDuration = 500 * time.Millisecond
+	notifier.RetryBackoffDuration = 200 * time.Millisecond
 	go start("notifier", "--config", testConfig)
 
 	result := m.Run()

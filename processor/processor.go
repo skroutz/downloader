@@ -53,7 +53,7 @@ import (
 )
 
 var (
-	QueueBackoffDuration = 120 * time.Second
+	RetryBackoffDuration = 2 * time.Minute
 )
 
 // TODO: these should all be configuration options provided by the caller
@@ -538,7 +538,7 @@ func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 	if j.DownloadCount >= maxDownloadRetries {
 		return wp.markJobFailed(j, meta)
 	}
-	return wp.p.Storage.QueuePendingDownload(j, QueueBackoffDuration)
+	return wp.p.Storage.QueuePendingDownload(j, time.Duration(j.DownloadCount)*RetryBackoffDuration)
 }
 
 func (wp *workerPool) markJobInProgress(j *job.Job) error {

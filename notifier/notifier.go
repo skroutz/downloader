@@ -34,7 +34,7 @@ var (
 	// TODO: we should probably get rid of expvar to avoid such issues
 	statsID = "Notifier"
 
-	QueueBackoffDuration = 600 * time.Second
+	RetryBackoffDuration = 10 * time.Minute
 
 	// Based on http.DefaultTransport
 	//
@@ -250,7 +250,7 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
 		return n.markCbFailed(j, err)
 	}
-	return n.Storage.QueuePendingCallback(j, QueueBackoffDuration)
+	return n.Storage.QueuePendingCallback(j, time.Duration(j.CallbackCount)*RetryBackoffDuration)
 }
 
 // callbackInfo validates that the job is good for callback and
