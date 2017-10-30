@@ -144,10 +144,11 @@ func (s *Storage) AggregationExists(a *job.Aggregation) (bool, error) {
 }
 
 // QueuePendingDownload sets the state of a job to "Pending", saves it and
-// adds it to its aggregation queue
+// adds it to its aggregation queue.
+// If a delay >0 is given, the job is queued with a higher score & actually later in time.
 //
 // TODO: should we check that job already exists in redis? maybe do HSET instead?
-func (s *Storage) QueuePendingDownload(j *job.Job) error {
+func (s *Storage) QueuePendingDownload(j *job.Job, delay time.Duration) error {
 	j.DownloadState = job.StatePending
 	err := s.SaveJob(j)
 	if err != nil {
@@ -156,12 +157,14 @@ func (s *Storage) QueuePendingDownload(j *job.Job) error {
 
 	z := redis.Z{
 		Member: j.ID,
-		Score:  float64(time.Now().Unix()),
+		Score:  float64(time.Now().Add(delay).Unix()),
 	}
 	return s.Redis.ZAdd(JobsKeyPrefix+j.AggrID, z).Err()
 }
 
-func (s *Storage) QueuePendingCallback(j *job.Job) error {
+// QueuePendingCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
+// If a delay >0 is given, the job is queued with a higher score & actually later in time.
+func (s *Storage) QueuePendingCallback(j *job.Job, delay time.Duration) error {
 	j.CallbackState = job.StatePending
 	err := s.SaveJob(j)
 	if err != nil {
@@ -170,7 +173,7 @@ func (s *Storage) QueuePendingCallback(j *job.Job) error {
 
 	z := redis.Z{
 		Member: j.ID,
-		Score:  float64(time.Now().Unix()),
+		Score:  float64(time.Now().Add(delay).Unix()),
 	}
 	return s.Redis.ZAdd(CallbackQueue, z).Err()
 }

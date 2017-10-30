@@ -61,7 +61,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		err := store.QueuePendingCallback(tc.j)
+		err := store.QueuePendingCallback(tc.j, 0)
 		if err != nil {
 			t.Fatal(err)
 		}

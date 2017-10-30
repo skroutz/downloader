@@ -34,6 +34,8 @@ var (
 	// TODO: we should probably get rid of expvar to avoid such issues
 	statsID = "Notifier"
 
+	QueueBackoffDuration = 600 * time.Second
+
 	// Based on http.DefaultTransport
 	//
 	// See https://golang.org/pkg/net/http/#RoundTripper
@@ -191,7 +193,7 @@ func (n *Notifier) collectRogueCallbacks() {
 					n.Log.Printf("Could not get job for Redis: %v", err)
 					continue
 				}
-				err = n.Storage.QueuePendingCallback(&jb)
+				err = n.Storage.QueuePendingCallback(&jb, 0)
 				if err != nil {
 					n.Log.Printf("Could not queue job for download: %v", err)
 					continue
@@ -248,7 +250,7 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
 		return n.markCbFailed(j, err)
 	}
-	return n.Storage.QueuePendingCallback(j)
+	return n.Storage.QueuePendingCallback(j, QueueBackoffDuration)
 }
 
 // callbackInfo validates that the job is good for callback and

@@ -145,7 +145,7 @@ func TestPerformUserAgent(t *testing.T) {
 	}()
 	waitForServer("8543")
 
-	err = store.QueuePendingDownload(j)
+	err = store.QueuePendingDownload(j, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

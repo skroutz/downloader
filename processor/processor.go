@@ -52,6 +52,10 @@ import (
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
+var (
+	QueueBackoffDuration = 120 * time.Second
+)
+
 // TODO: these should all be configuration options provided by the caller
 const (
 	workerMaxInactivity = 5 * time.Second
@@ -279,7 +283,7 @@ func (p *Processor) collectRogueDownloads() {
 					p.Log.Printf("Error fetching job with id '%s' from Redis: %s", jobID, err)
 					continue
 				}
-				err = p.Storage.QueuePendingDownload(&jb)
+				err = p.Storage.QueuePendingDownload(&jb, 0)
 				if err != nil {
 					p.Log.Printf("Error queueing job with id '%s' for download: %s", jb.ID, err)
 					continue
@@ -534,7 +538,7 @@ func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 	if j.DownloadCount >= maxDownloadRetries {
 		return wp.markJobFailed(j, meta)
 	}
-	return wp.p.Storage.QueuePendingDownload(j)
+	return wp.p.Storage.QueuePendingDownload(j, QueueBackoffDuration)
 }
 
 func (wp *workerPool) markJobInProgress(j *job.Job) error {
@@ -550,7 +554,7 @@ func (wp *workerPool) markJobSuccess(j *job.Job) error {
 	j.DownloadMeta = ""
 
 	// NOTE: we depend on QueuePendingCallback calling SaveJob(j)
-	return wp.p.Storage.QueuePendingCallback(j)
+	return wp.p.Storage.QueuePendingCallback(j, 0)
 }
 
 // Marks j as failed and enqueues it for callback
@@ -559,5 +563,5 @@ func (wp *workerPool) markJobFailed(j *job.Job, meta ...string) error {
 	j.DownloadMeta = strings.Join(meta, "\n")
 
 	// NOTE: we depend on QueuePendingCallback calling SaveJob(j)
-	return wp.p.Storage.QueuePendingCallback(j)
+	return wp.p.Storage.QueuePendingCallback(j, 0)
 }
