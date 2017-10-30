@@ -25,6 +25,7 @@ type CallbackInfo struct {
 	Success     bool   `json:"success"`
 	Error       string `json:"error"`
 	Extra       string `json:"extra"`
+	ResourceURL string `json:"resource_url"`
 	DownloadURL string `json:"download_url"`
 }
 
@@ -213,6 +214,7 @@ func (n *Notifier) getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 		Success:     j.DownloadState == job.StateSuccess,
 		Error:       j.DownloadMeta,
 		Extra:       j.Extra,
+		ResourceURL: j.URL,
 		DownloadURL: jobDownloadURL(j, *n.DownloadURL),
 	}, nil
 }
