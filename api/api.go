@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"time"
 
@@ -46,7 +47,8 @@ func heartbeat(path string) func(http.ResponseWriter, *http.Request) {
 
 func (as *API) stats() func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		getCmd := as.Storage.Redis.Get("Downloader:Stats:Processor")
+		id := path.Base(r.RequestURI)
+		getCmd := as.Storage.Redis.Get("stats:" + id)
 		if getCmd.Err() != nil {
 			http.Error(w, getCmd.Err().Error(), http.StatusInternalServerError)
 			return
@@ -70,7 +72,7 @@ func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)
 	mux.HandleFunc("/hb", heartbeat(heartbeatPath))
-	mux.HandleFunc("/stats", as.stats())
+	mux.HandleFunc("/stats/", as.stats())
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	as.Log = logger
 	return as
