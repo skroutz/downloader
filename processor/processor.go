@@ -156,10 +156,12 @@ func (p *Processor) Start(closeCh chan struct{}) {
 	maxWorkerPools := new(expvar.Int)
 
 	p.collectRogueDownloads()
-	stats.New(ctx, 5*time.Second,
+
+	stat_interval := 5 * time.Second
+	stats.New(ctx, stat_interval,
 		func(m *expvar.Map) {
 			// Store metrics in JSON
-			err := p.Storage.SetStats("processor", m.String())
+			err := p.Storage.SetStats("processor", m.String(), 2*stat_interval)
 			if err != nil {
 				p.Log.Println("Could not report stats", err)
 			}

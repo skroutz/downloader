@@ -325,6 +325,6 @@ func (s *Storage) GetStats(id string) ([]byte, error) {
 }
 
 // SetStats saves stats in Redis
-func (s *Storage) SetStats(id, stats string) error {
-	return s.Redis.Set(strings.Join([]string{statsPrefix, id}, ":"), stats, 0).Err()
+func (s *Storage) SetStats(id, stats string, expiration time.Duration) error {
+	return s.Redis.Set(strings.Join([]string{statsPrefix, id}, ":"), stats, expiration).Err()
 }
