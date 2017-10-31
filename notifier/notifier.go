@@ -61,7 +61,7 @@ func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{},
 			},
-			Timeout: time.Duration(3) * time.Second,
+			Timeout: time.Duration(5) * time.Second,
 		},
 		cbChan:      make(chan job.Job),
 		DownloadURL: url,
@@ -236,6 +236,6 @@ func (n *Notifier) markCbInProgress(j *job.Job) error {
 func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
 	j.CallbackState = job.StateFailed
 	j.CallbackMeta = strings.Join(meta, "\n")
-	n.Log.Printf("Error: Callback for %s failed", j)
+	n.Log.Printf("Error: Callback for %s failed: %s", j, j.CallbackMeta)
 	return n.Storage.SaveJob(j)
 }
