@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+# Removes files whose matching redis job has been deleted
+# Also removes empty dirs 
+require "redis"
+require "find"
+
+dry_run = true
+dry_run = false if ARGV[0] == "force"
+
+DOWNLOAD_PATH = '/var/cache/downloader/assets/'
+redis = Redis.new(host: "localhost")
+
+Find.find(DOWNLOAD_PATH) do |path|
+	next if path == DOWNLOAD_PATH
+	if File.file?(path)
+		if !redis.exists("job:#{File.basename(path)}")
+			puts "Deleting #{path}"
+			File.delete(path) if !dry_run
+		end
+	end
+
+	if File.directory?(path) && Dir.entries(path).size <= 2 
+		puts "Deleting directory #{path}"
+		Dir.delete(path) if !dry_run
+	end
+end
