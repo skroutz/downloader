@@ -1,0 +1,23 @@
+#!/usr/bin/env/ruby
+#
+# Fixes callback URL of failed callbacks so that they can be re-scheduled
+# when the Notifier restarts and picks-up rogue callbacks.
+require "redis"
+
+redis = Redis.new(host: "localhost")
+jobs = redis.keys("job:*")
+
+jobs.each do |job_key|
+	job = redis.hgetall(job_key)
+
+	if job["CallbackState"] == "Failed"
+		new_url = job["CallbackURL"].sub("http://www.", "https://earth.")
+
+		redis.hset(job_key, "CallbackState", "InProgress")
+		redis.hset(job_key, "CallbackCount", "0")
+		redis.hset(job_key, "CallbackMeta", "")
+		redis.hset(job_key, "CallbackURL", new_url)
+
+		puts "Re-scheduled callback for #{job_key}"
+	end
+end
