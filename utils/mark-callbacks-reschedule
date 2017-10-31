@@ -11,12 +11,12 @@ jobs.each do |job_key|
 	job = redis.hgetall(job_key)
 
 	if job["CallbackState"] == "Failed"
-		new_url = job["CallbackURL"].sub("http://www.", "https://earth.")
+		#new_url = job["CallbackURL"].sub("http://www.", "https://earth.")
 
 		redis.hset(job_key, "CallbackState", "InProgress")
 		redis.hset(job_key, "CallbackCount", "0")
 		redis.hset(job_key, "CallbackMeta", "")
-		redis.hset(job_key, "CallbackURL", new_url)
+		#redis.hset(job_key, "CallbackURL", new_url)
 
 		puts "Re-scheduled callback for #{job_key}"
 	end
