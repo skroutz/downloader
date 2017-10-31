@@ -20,14 +20,9 @@ STDIN.each do |line|
 
   fullpath = "#{ASSETS_PATH}#{match[1]}"
 
-  next if !File.exist?(fullpath)
-
-  _, dir, _ = match[1].split("/")
-
   if dry_run
     puts "Would remove #{fullpath}"
   else
-    File.delete(fullpath)
-    Dir.rmdir(dir) rescue nil
+    File.delete(fullpath) rescue nil
   end
 end
