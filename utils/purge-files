@@ -28,6 +28,6 @@ STDIN.each do |line|
     puts "Would remove #{fullpath}"
   else
     File.delete(fullpath)
-    Dir.rmdir(dir)
+    Dir.rmdir(dir) rescue nil
   end
 end
