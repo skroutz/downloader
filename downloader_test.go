@@ -127,11 +127,13 @@ func TestResourceExists(t *testing.T) {
 	var expected, actual []byte
 	var err error
 
+	resourceURL := downloadURL("sample-1.jpg")
+
 	// Test job creation (APIServer)
 	jobData := testJob{
 		"aggr_id":      "aggrFOO",
 		"aggr_limit":   1,
-		"url":          downloadURL("sample-1.jpg"),
+		"url":          resourceURL,
 		"callback_url": callbackURL(),
 		"extra":        "foobar"}
 
@@ -159,6 +161,9 @@ func TestResourceExists(t *testing.T) {
 		}
 		if ci.Extra != "foobar" {
 			t.Fatalf("Expected Extra to be 'foobar', was %s", ci.Extra)
+		}
+		if ci.ResourceURL != resourceURL {
+			t.Fatalf("Expected ResourceURL to be %s, was %s", resourceURL, ci.ResourceURL)
 		}
 		if !strings.HasPrefix(ci.DownloadURL, "http://localhost/") {
 			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
@@ -228,10 +233,11 @@ FILECHECK:
 func TestResourceDontExist(t *testing.T) {
 	var ci notifier.CallbackInfo
 
+	resourceURL := downloadURL("i-dont-exist.foo")
 	job := testJob{
 		"aggr_id":      "foobar",
 		"aggr_limit":   1,
-		"url":          downloadURL("i-dont-exist.foo"),
+		"url":          resourceURL,
 		"callback_url": callbackURL()}
 
 	err := postJob(job)
@@ -256,6 +262,9 @@ func TestResourceDontExist(t *testing.T) {
 		if ci.DownloadURL != "" {
 			t.Fatalf("Expected DownloadURL to be empty: %#v", ci)
 		}
+		if ci.ResourceURL != resourceURL {
+			t.Fatalf("Expected ResourceURL to be %s, was %s", resourceURL, ci.ResourceURL)
+		}
 		if ci.Extra != "" {
 			t.Fatalf("Expected Extra to be empty: %#v", ci)
 		}
@@ -266,10 +275,12 @@ func TestResourceDontExist(t *testing.T) {
 func TestTransientDownstreamError(t *testing.T) {
 	var ci notifier.CallbackInfo
 
+	resourceURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fsHost, fsPort, fsPath)
+
 	job := testJob{
 		"aggr_id":      "murphy",
 		"aggr_limit":   1,
-		"url":          fmt.Sprintf("http://%s:%s%ssample-1.jpg", fsHost, fsPort, fsPath),
+		"url":          resourceURL,
 		"callback_url": fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)}
 
 	fsChan <- http.StatusInternalServerError // 1st try
@@ -298,6 +309,9 @@ func TestTransientDownstreamError(t *testing.T) {
 		}
 		if ci.Extra != "" {
 			t.Fatalf("Expected Extra to be empty: %#v", ci)
+		}
+		if ci.ResourceURL != resourceURL {
+			t.Fatalf("Expected ResourceURL to be %s, was %s", resourceURL, ci.ResourceURL)
 		}
 		if !strings.HasPrefix(ci.DownloadURL, "http://localhost/") {
 			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
