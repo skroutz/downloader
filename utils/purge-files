@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+#
+# Usage:
+#
+#   cat access.log | ASSET_PATH="/tmp" purge-files --purge
+#
+ASSETS_PATH = ENV["ASSET_PATH"] || "/var/cache/downloader/assets"
+dry_run = !(ARGV[0] == "--purge")
+
+raise "Nothing passed to STDIN" if STDIN.tty?
+
+regex = /GET \/assets(\/\S+\/\S+) .+ 200/
+
+STDIN.each do |line|
+  line.chomp!
+
+  if !(match = line.match(regex))
+    next
+  end
+
+  fullpath = "#{ASSETS_PATH}#{match[1]}"
+
+  next if !File.exist?(fullpath)
+
+  _, dir, _ = match[1].split("/")
+
+  if dry_run
+    puts "Would remove #{fullpath}"
+  else
+    File.delete(fullpath)
+    Dir.rmdir(dir)
+  end
+end
