@@ -395,10 +395,6 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 			if err != nil {
 				wp.log.Printf("perform: Error marking %s failed: %s", j, err)
 			}
-			err = wp.p.Storage.QueuePendingCallback(j)
-			if err != nil {
-				wp.log.Printf("perform: Error queueing callback for %s: %s", j, err)
-			}
 			return
 		}
 		err = wp.requeueOrFail(j, err.Error())
@@ -418,10 +414,6 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		err = wp.markJobFailed(j, fmt.Sprintf("Received status code %d", resp.StatusCode))
 		if err != nil {
 			wp.log.Printf("perform: Error marking %s failed: %s", j, err)
-		}
-		err = wp.p.Storage.QueuePendingCallback(j)
-		if err != nil {
-			wp.log.Printf("perform: Error queueing callback for %s: %s", j, err)
 		}
 		return
 	}
@@ -464,11 +456,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 // it as failed
 func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 	if j.DownloadCount >= maxDownloadRetries {
-		err := wp.markJobFailed(j, meta)
-		if err != nil {
-			return err
-		}
-		return wp.p.Storage.QueuePendingCallback(j)
+		return wp.markJobFailed(j, meta)
 	}
 	return wp.p.Storage.QueuePendingDownload(j)
 }
@@ -492,5 +480,7 @@ func (wp *workerPool) markJobSuccess(j *job.Job) error {
 func (wp *workerPool) markJobFailed(j *job.Job, meta ...string) error {
 	j.DownloadState = job.StateFailed
 	j.DownloadMeta = strings.Join(meta, "\n")
-	return wp.p.Storage.SaveJob(j)
+
+	// NOTE: we depend on QueuePendingCallback calling SaveJob(j)
+	return wp.p.Storage.QueuePendingCallback(j)
 }
