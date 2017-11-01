@@ -456,12 +456,6 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	err = wp.markJobSuccess(j)
 	if err != nil {
 		wp.log.Printf("perform: Error marking %s successful: %s", j, err)
-		return
-	}
-
-	err = wp.p.Storage.QueuePendingCallback(j)
-	if err != nil {
-		wp.log.Printf("perform: Error scheduling callback for %s:", j, err)
 	}
 }
 
@@ -485,12 +479,16 @@ func (wp *workerPool) markJobInProgress(j *job.Job) error {
 	return wp.p.Storage.SaveJob(j)
 }
 
+// Marks j as successful and enqueues it for callback
 func (wp *workerPool) markJobSuccess(j *job.Job) error {
 	j.DownloadState = job.StateSuccess
 	j.DownloadMeta = ""
-	return wp.p.Storage.SaveJob(j)
+
+	// NOTE: we depend on QueuePendingCallback calling SaveJob(j)
+	return wp.p.Storage.QueuePendingCallback(j)
 }
 
+// Marks j as failed and enqueues it for callback
 func (wp *workerPool) markJobFailed(j *job.Job, meta ...string) error {
 	j.DownloadState = job.StateFailed
 	j.DownloadMeta = strings.Join(meta, "\n")
