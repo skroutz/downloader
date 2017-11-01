@@ -1,0 +1,45 @@
+#!/usr/bin/env ruby
+#
+# Detects failed callbacks and re-schedules them so that they will be re-picked
+# when the Notifier restarts and picks-up rogue callbacks.
+#
+# Usage:
+#
+#   Dry run:
+#     reschedule-failed-callbacks
+#
+#   Reschedule:
+#     reschedule-failed-callbacks --reschedule
+#
+require "redis"
+redis = Redis.new(host: ENV["REDIS"] || "localhost")
+
+dry_run = !(ARGV[0] == "--reschedule")
+
+cursor = 0
+
+loop do
+  cursor, jobs = redis.scan(cursor, match: "job:*")
+
+  jobs.each do |job_key|
+    job = redis.hgetall(job_key)
+
+    next if job["CallbackState"] != "Failed"
+
+    if dry_run
+      puts "Would reschedule callback for #{job_key}"
+    else
+      redis.hset(job_key, "CallbackState", "InProgress")
+      redis.hset(job_key, "CallbackCount", "0")
+      redis.hset(job_key, "CallbackMeta", "")
+      puts "Re-scheduled callback for #{job_key}"
+    end
+  end
+
+  break if cursor == "0"
+end
+
+if !dry_run
+  puts "Finished. Be sure to restart notifier so that rescheduled callbacks " \
+    "are picked up."
+end
