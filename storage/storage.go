@@ -155,7 +155,6 @@ func (s *Storage) QueuePendingDownload(j *job.Job) error {
 	return s.Redis.ZAdd(JobsKeyPrefix+j.AggrID, z).Err()
 }
 
-// QueuePendingCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
 func (s *Storage) QueuePendingCallback(j *job.Job) error {
 	j.CallbackState = job.StatePending
 	err := s.SaveJob(j)

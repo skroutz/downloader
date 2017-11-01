@@ -4,9 +4,9 @@
 #
 # Usage:
 #
-#   ./redis-stats
+#   ./redis-stats redis.example.com
 require "redis"
-redis = Redis.new(host: ENV["REDIS_HOST"] || "localhost")
+redis = Redis.new(host: ARGV[0] || "localhost")
 
 all_keys = Hash.new(0)
 cursor = 0
