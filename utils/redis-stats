@@ -1,0 +1,23 @@
+#!/usr/bin/env ruby
+#
+# Script that reports Redis statistics regarding downloader-related keys.
+#
+# Usage:
+#
+#   ./redis-stats
+require "redis"
+redis = Redis.new(host: ENV["REDIS_HOST"] || "localhost")
+
+all_keys = Hash.new(0)
+cursor = 0
+
+loop do
+  cursor, keys = redis.scan(cursor)
+  keys.map { |k| k.split(":")[0] }.each do |k|
+    all_keys[k] += 1
+  end
+
+  break if cursor == "0"
+end
+
+puts all_keys
