@@ -33,7 +33,6 @@ func (s *Stats) Run(ctx context.Context) {
 }
 
 // New initializes the Reporter and start Run
-func New(ctx context.Context, interval time.Duration, report func(*expvar.Map)) {
+func New(interval time.Duration, report func(*expvar.Map)) {
 	Reporter = &Stats{expvar.NewMap("Metrics"), interval, report}
-	go Reporter.Run(ctx)
 }
