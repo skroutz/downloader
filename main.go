@@ -106,6 +106,7 @@ func main() {
 				}
 				logger := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
 				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, client, logger)
+				processor.StatsIntvl = time.Duration(cfg.Processor.StatsInterval) * time.Millisecond
 				if err != nil {
 					return err
 				}
@@ -146,6 +147,8 @@ func main() {
 				if err != nil {
 					logger.Fatal(err)
 				}
+
+				notifier.StatsIntvl = time.Duration(cfg.Notifier.StatsInterval) * time.Millisecond
 
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan)

@@ -44,6 +44,7 @@ type Notifier struct {
 	Storage     *storage.Storage
 	Log         *log.Logger
 	DownloadURL *url.URL
+	StatsIntvl  time.Duration
 
 	// TODO: These should be exported
 	concurrency int
@@ -65,6 +66,7 @@ func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string
 	return Notifier{
 		Storage:     s,
 		Log:         logger,
+		StatsIntvl:  5 * time.Second,
 		concurrency: concurrency,
 		client: &http.Client{
 			Transport: &http.Transport{
@@ -98,16 +100,16 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 	// Check Redis for jobs left in InProgress state
 	n.collectRogueCallbacks()
 
-	stat_interval := 5 * time.Second
 	ctx, cancelfunc := context.WithCancel(context.Background())
-	stats.New(ctx, stat_interval,
+	stats.New(n.StatsIntvl,
 		func(m *expvar.Map) {
 			// Store metrics in JSON
-			err := n.Storage.SetStats("notifier", m.String(), 2*stat_interval)
+			err := n.Storage.SetStats("notifier", m.String(), 2*n.StatsIntvl)
 			if err != nil {
 				n.Log.Println("Could not report stats", err)
 			}
 		})
+	go stats.Reporter.Run(ctx)
 
 	for {
 		select {

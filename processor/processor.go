@@ -87,6 +87,9 @@ type Processor struct {
 
 	Log *log.Logger
 
+	// Interval between each stats flush
+	StatsIntvl time.Duration
+
 	// pools contain the existing worker pools
 	pools map[string]*workerPool
 }
@@ -136,6 +139,7 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, client *
 		Storage:      storage,
 		StorageDir:   storageDir,
 		ScanInterval: scanInterval,
+		StatsIntvl:   5 * time.Second,
 		Client:       client,
 		Log:          logger,
 		pools:        make(map[string]*workerPool)}, nil
@@ -157,15 +161,14 @@ func (p *Processor) Start(closeCh chan struct{}) {
 
 	p.collectRogueDownloads()
 
-	stat_interval := 5 * time.Second
-	stats.New(ctx, stat_interval,
+	stats.New(p.StatsIntvl,
 		func(m *expvar.Map) {
-			// Store metrics in JSON
-			err := p.Storage.SetStats("processor", m.String(), 2*stat_interval)
+			err := p.Storage.SetStats("processor", m.String(), 2*p.StatsIntvl) // Autoremove stats after 2 times the interval
 			if err != nil {
 				p.Log.Println("Could not report stats", err)
 			}
 		})
+	go stats.Reporter.Run(ctx)
 
 PROCESSOR_LOOP:
 	for {
