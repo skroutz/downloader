@@ -291,6 +291,7 @@ func (wp *workerPool) activeWorkers() int {
 // performed in start.
 func (wp *workerPool) start(ctx context.Context, storageDir string) {
 	wp.log.Printf("Started working...")
+	startedAt := time.Now()
 
 	var wg sync.WaitGroup
 
@@ -337,7 +338,9 @@ WORKERPOOL_LOOP:
 
 	close(wp.jobChan)
 	wg.Wait()
-	wp.log.Printf("Bye!")
+
+	lifetime := time.Now().Sub(startedAt).Truncate(time.Second)
+	wp.log.Printf("Bye! (lifetime:%s)", lifetime)
 }
 
 // work consumes Jobs from wp and performs them.
