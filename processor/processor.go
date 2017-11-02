@@ -443,6 +443,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	err = out.Sync()
 	if err != nil {
 		wp.log.Printf("perform: Error syncing download file for %s: %s", j, err)
+		return
 	}
 
 	err = wp.markJobSuccess(j)
