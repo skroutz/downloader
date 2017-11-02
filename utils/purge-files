@@ -21,7 +21,7 @@ STDIN.each do |line|
   fullpath = "#{ASSETS_PATH}#{match[1]}"
 
   if dry_run
-    puts "Would remove #{fullpath}"
+    puts fullpath if File.exist?(fullpath)
   else
     File.delete(fullpath) rescue nil
   end
