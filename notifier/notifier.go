@@ -2,9 +2,11 @@ package notifier
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"expvar"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,10 +17,16 @@ import (
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/stats"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
-const maxCallbackRetries = 2
+const (
+	maxCallbackRetries = 2
+
+	statsFailedCallbacks     = "failedCallbacks"     //Counter
+	statsSuccessfulCallbacks = "successfulCallbacks" //Counter
+)
 
 // CallbackInfo holds info to be posted back to the provided callback url.
 type CallbackInfo struct {
@@ -90,11 +98,23 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 	// Check Redis for jobs left in InProgress state
 	n.collectRogueCallbacks()
 
+	stat_interval := 5 * time.Second
+	ctx, cancelfunc := context.WithCancel(context.Background())
+	stats.New(ctx, stat_interval,
+		func(m *expvar.Map) {
+			// Store metrics in JSON
+			err := n.Storage.SetStats("notifier", m.String(), 2*stat_interval)
+			if err != nil {
+				n.Log.Println("Could not report stats", err)
+			}
+		})
+
 	for {
 		select {
 		case <-closeChan:
 			close(n.cbChan)
 			wg.Wait()
+			cancelfunc()
 			closeChan <- struct{}{}
 			return
 		default:
@@ -190,6 +210,7 @@ func (n *Notifier) Notify(j *job.Job) error {
 		return n.retryOrFail(j, err.Error())
 	}
 
+	stats.Reporter.Add(statsSuccessfulCallbacks, 1)
 	return n.Storage.RemoveJob(j.ID)
 }
 
@@ -239,5 +260,8 @@ func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
 	j.CallbackState = job.StateFailed
 	j.CallbackMeta = strings.Join(meta, "\n")
 	n.Log.Printf("Error: Callback for %s failed: %s", j, j.CallbackMeta)
+
+	//Report stats
+	stats.Reporter.Add(statsFailedCallbacks, 1)
 	return n.Storage.SaveJob(j)
 }
