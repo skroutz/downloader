@@ -62,6 +62,9 @@ func (as *API) stats() func(http.ResponseWriter, *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write(respbytes)
+		if err != nil {
+			as.Log.Println("Error reporting stats:", err)
+		}
 	}
 }
 

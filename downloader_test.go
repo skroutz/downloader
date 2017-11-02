@@ -60,7 +60,6 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-
 	flushRedis()
 
 	// start test file server
@@ -85,16 +84,16 @@ func TestMain(m *testing.M) {
 
 	// start API server, Processor & Notifier
 	componentsWg.Add(1)
-	go start("api", "--host", apiHost, "--port", apiPort)
+	go start("api", "--host", apiHost, "--port", apiPort, "--config", "config.test.json")
 	waitForServer(apiPort)
 
 	componentsWg.Add(1)
-	go start("processor")
+	go start("processor", "--config", "config.test.json")
 	// circumvent race conditions with os.Args
 	time.Sleep(100 * time.Millisecond)
 
 	componentsWg.Add(1)
-	go start("notifier")
+	go start("notifier", "--config", "config.test.json")
 
 	result := m.Run()
 
@@ -318,6 +317,96 @@ func TestTransientDownstreamError(t *testing.T) {
 				ci)
 		}
 	}
+}
+
+// TODO: this should be extracted to package-specific integration tests
+// this is not the place to test such functionality
+func TestStats(t *testing.T) {
+	var res *http.Response
+	var err error
+	stats := make(map[string]int)
+
+	jobs := []testJob{
+		{"aggr_id": "statsfoo",
+			"aggr_limit":   4,
+			"url":          downloadURL("sample-1.jpg"),
+			"callback_url": callbackURL(),
+			"extra":        "foobar"},
+		{"aggr_id": "statsbar",
+			"aggr_limit":   4,
+			"url":          downloadURL("sample-1.jpg"),
+			"callback_url": callbackURL(),
+			"extra":        "foobar"},
+	}
+
+	var wg sync.WaitGroup
+
+	for _, tj := range jobs {
+		wg.Add(1)
+		go func(j testJob) {
+			defer wg.Done()
+			err := postJob(j)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}(tj)
+	}
+
+	<-callbacks
+	<-callbacks
+
+	found := false
+	for i := 0; i < 5; i++ {
+		time.Sleep(500 * time.Millisecond)
+		res, err = apiClient.Get(fmt.Sprintf("http://%s:%s/stats/processor", apiHost, apiPort))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.StatusCode != 200 {
+			continue
+		}
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = json.Unmarshal(body, &stats)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats["spawnedWorkerPools"] < 2 {
+			continue
+		}
+		found = true
+		break
+	}
+	defer res.Body.Close()
+
+	if !found {
+		t.Fatal("Not found processor stats after 5 tries:", stats)
+	}
+
+	if stats["spawnedWorkerPools"] < 2 {
+		t.Fatal("Expected spawnedWorkerPools to be less than or equal to 2:", stats)
+	}
+	if stats["maxWorkerPools"] > stats["spawnedWorkerPools"] {
+		t.Fatal("Expected maxWorkerPools to be <= spawnedWorkerPools", stats)
+	}
+	if stats["workerPools"] > stats["spawnedWorkerPools"] {
+		t.Fatal("Expected workerPools to be <= spawnedWorkerPools", stats)
+	}
+
+	// workers
+	if stats["spawnedWorkers"] < 2 {
+		t.Fatal("Expected spawnedWorkers to be larger than 2:", stats)
+	}
+	if stats["maxWorkers"] > stats["spawnedWorkers"] {
+		t.Fatal("Expected maxWorkers to be <= spawnedWorkers", stats)
+	}
+	if stats["workers"] > stats["spawnedWorkers"] {
+		t.Fatal("Expected workers to be <= spawnedWorkers", stats)
+	}
+
+	wg.Wait()
 }
 
 func TestLoad(t *testing.T) {

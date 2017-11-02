@@ -28,6 +28,13 @@ const (
 	statsSuccessfulCallbacks = "successfulCallbacks" //Counter
 )
 
+var (
+	// expvar.Publish() panics if a name is already registered, hence
+	// we need to be able to override it in order to test Notifier easily.
+	// TODO: we should probably get rid of expvar to avoid such issues
+	statsID = "Notifier"
+)
+
 // CallbackInfo holds info to be posted back to the provided callback url.
 type CallbackInfo struct {
 	Success     bool   `json:"success"`
@@ -64,20 +71,28 @@ func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string
 		return Notifier{}, errors.New("Notifier Concurrency must be a positive number")
 	}
 
-	return Notifier{
+	n := Notifier{
 		Storage:     s,
 		Log:         logger,
 		StatsIntvl:  5 * time.Second,
 		concurrency: concurrency,
 		client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{},
-			},
-			Timeout: time.Duration(5) * time.Second,
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+			Timeout:   time.Duration(5) * time.Second,
 		},
 		cbChan:      make(chan job.Job),
 		DownloadURL: url,
-	}, nil
+	}
+
+	n.stats = stats.New(statsID, n.StatsIntvl, func(m *expvar.Map) {
+		// Store metrics in JSON
+		err := n.Storage.SetStats("notifier", m.String(), 2*n.StatsIntvl)
+		if err != nil {
+			n.Log.Println("Could not report stats", err)
+		}
+	})
+
+	return n, nil
 }
 
 // Start starts the Notifier loop and instruments the worker goroutines that
@@ -94,7 +109,6 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 					n.Log.Printf("Notify error: %s", err)
 				}
 			}
-
 		}()
 	}
 
@@ -102,14 +116,6 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 	n.collectRogueCallbacks()
 
 	ctx, cancelfunc := context.WithCancel(context.Background())
-	n.stats = stats.New("Notifier", n.StatsIntvl,
-		func(m *expvar.Map) {
-			// Store metrics in JSON
-			err := n.Storage.SetStats("notifier", m.String(), 2*n.StatsIntvl)
-			if err != nil {
-				n.Log.Println("Could not report stats", err)
-			}
-		})
 	go n.stats.Run(ctx)
 
 	for {
