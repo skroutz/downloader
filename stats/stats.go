@@ -14,7 +14,7 @@ type Stats struct {
 }
 
 // Reporter encapsulates an expvar Map and acts as a metric reporting interface for each module
-var Reporter *Stats
+//var Reporter *Stats
 
 // Run calls the report function of Stats using the specified interval/
 // It shuts down when the provided context is cancelled
@@ -33,6 +33,6 @@ func (s *Stats) Run(ctx context.Context) {
 }
 
 // New initializes the Reporter and start Run
-func New(interval time.Duration, report func(*expvar.Map)) {
-	Reporter = &Stats{expvar.NewMap("Metrics"), interval, report}
+func New(id string, interval time.Duration, report func(*expvar.Map)) *Stats {
+	return &Stats{expvar.NewMap(id), interval, report}
 }

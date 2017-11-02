@@ -50,6 +50,7 @@ type Notifier struct {
 	concurrency int
 	client      *http.Client
 	cbChan      chan job.Job
+	stats       *stats.Stats
 }
 
 // NewNotifier takes the concurrency of the notifier as an argument
@@ -101,7 +102,7 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 	n.collectRogueCallbacks()
 
 	ctx, cancelfunc := context.WithCancel(context.Background())
-	stats.New(n.StatsIntvl,
+	n.stats = stats.New("Notifier", n.StatsIntvl,
 		func(m *expvar.Map) {
 			// Store metrics in JSON
 			err := n.Storage.SetStats("notifier", m.String(), 2*n.StatsIntvl)
@@ -109,7 +110,7 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 				n.Log.Println("Could not report stats", err)
 			}
 		})
-	go stats.Reporter.Run(ctx)
+	go n.stats.Run(ctx)
 
 	for {
 		select {
@@ -212,7 +213,7 @@ func (n *Notifier) Notify(j *job.Job) error {
 		return n.retryOrFail(j, err.Error())
 	}
 
-	stats.Reporter.Add(statsSuccessfulCallbacks, 1)
+	n.stats.Add(statsSuccessfulCallbacks, 1)
 	return n.Storage.RemoveJob(j.ID)
 }
 
@@ -264,6 +265,6 @@ func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
 	n.Log.Printf("Error: Callback for %s failed: %s", j, j.CallbackMeta)
 
 	//Report stats
-	stats.Reporter.Add(statsFailedCallbacks, 1)
+	n.stats.Add(statsFailedCallbacks, 1)
 	return n.Storage.SaveJob(j)
 }

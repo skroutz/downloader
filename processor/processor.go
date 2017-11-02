@@ -92,6 +92,8 @@ type Processor struct {
 
 	// pools contain the existing worker pools
 	pools map[string]*workerPool
+
+	stats *stats.Stats
 }
 
 // workerPool corresponds to an Aggregation. It spawns and instruments the
@@ -161,14 +163,14 @@ func (p *Processor) Start(closeCh chan struct{}) {
 
 	p.collectRogueDownloads()
 
-	stats.New(p.StatsIntvl,
+	p.stats = stats.New("Processor", p.StatsIntvl,
 		func(m *expvar.Map) {
 			err := p.Storage.SetStats("processor", m.String(), 2*p.StatsIntvl) // Autoremove stats after 2 times the interval
 			if err != nil {
 				p.Log.Println("Could not report stats", err)
 			}
 		})
-	go stats.Reporter.Run(ctx)
+	go p.stats.Run(ctx)
 
 PROCESSOR_LOOP:
 	for {
@@ -176,7 +178,7 @@ PROCESSOR_LOOP:
 		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
 			delete(p.pools, aggrID)
-			stats.Reporter.Add(statsWorkerPools, -1)
+			p.stats.Add(statsWorkerPools, -1)
 		// Close signal from upper layer
 		case <-closeCh:
 			cancel()
@@ -205,11 +207,11 @@ PROCESSOR_LOOP:
 						wpWg.Add(1)
 
 						//Report Metrics
-						stats.Reporter.Add(statsWorkerPools, 1)
-						stats.Reporter.Add(statsSpawnedWorkerPools, 1)
+						p.stats.Add(statsWorkerPools, 1)
+						p.stats.Add(statsSpawnedWorkerPools, 1)
 						if pools := int64(len(p.pools)); maxWorkerPools.Value() < pools {
 							maxWorkerPools.Set(pools)
-							stats.Reporter.Set(statsMaxWorkerPools, maxWorkerPools)
+							p.stats.Set(statsMaxWorkerPools, maxWorkerPools)
 						}
 
 						go func() {
@@ -309,24 +311,24 @@ func (wp *workerPool) increaseWorkers() {
 	atomic.AddInt32(&wp.numActiveWorkers, 1)
 
 	// Update stats
-	stats.Reporter.Add(statsSpawnedWorkers, 1)
-	stats.Reporter.Add(statsWorkers, 1)
+	wp.p.stats.Add(statsSpawnedWorkers, 1)
+	wp.p.stats.Add(statsWorkers, 1)
 
 	//update max workers
 	activeWorkers := int64(wp.activeWorkers())
-	max, ok := stats.Reporter.Get(statsMaxWorkers).(*expvar.Int)
+	max, ok := wp.p.stats.Get(statsMaxWorkers).(*expvar.Int)
 	if ok && max.Value() >= activeWorkers {
 		return
 	}
 
 	max = new(expvar.Int)
 	max.Set(activeWorkers)
-	stats.Reporter.Set(statsMaxWorkers, max)
+	wp.p.stats.Set(statsMaxWorkers, max)
 }
 
 // decreaseWorkers atomically decreases the activeWorkers counter of wp by 1
 func (wp *workerPool) decreaseWorkers() {
-	stats.Reporter.Add(statsWorkers, -1)
+	wp.p.stats.Add(statsWorkers, -1)
 	atomic.AddInt32(&wp.numActiveWorkers, -1)
 }
 
@@ -430,7 +432,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
 		wp.log.Printf("perform: Error initializing download request for %s: %s", j, err)
-		stats.Reporter.Add(statsFailures, 1)
+		wp.p.stats.Add(statsFailures, 1)
 		err = wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
 		if err != nil {
 			wp.log.Printf("perform: Error marking %s as failed: %s", j, err)
@@ -477,7 +479,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	out, err := wp.p.storageFile(j)
 	if err != nil {
 		wp.log.Printf("perform: Error creating download file for %s: %s", j, err)
-		stats.Reporter.Add(statsFailures, 1)
+		wp.p.stats.Add(statsFailures, 1)
 		err = wp.requeueOrFail(j, fmt.Sprintf("Could not create/write to file, %v", err))
 		if err != nil {
 			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
@@ -499,7 +501,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	err = out.Sync()
 	if err != nil {
 		wp.log.Printf("perform: Error syncing download file for %s: %s", j, err)
-		stats.Reporter.Add(statsFailures, 1)
+		wp.p.stats.Add(statsFailures, 1)
 		return
 	}
 
