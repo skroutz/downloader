@@ -55,6 +55,8 @@ COMPONENTS.each do |component|
     data << "#{k} #{v} #{ts}\n"
   end
 
+  next if data.empty?
+
   if ARGV[1]
     host = ARGV[1].split(":")[0]
     port = Integer(ARGV[1].split(":")[1])
