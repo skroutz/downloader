@@ -1,0 +1,67 @@
+#!/usr/bin/env ruby
+#
+# Script that gathers statistics exposed from downloader over HTTP and
+# feeds them to Graphite.
+#
+# Usage:
+#
+#   ./downloader-graphite <scratchd-stats-url> <graphite-host:graphite-port>
+#
+#   If graphite info isn't passed, then output will be printed
+#   to stdout instead.
+#
+# Example:
+#
+#   $ ./dlstats-graphite http://scratch1.skroutz.gr:4242/stats stats.skroutz.gr:2003
+#
+abort "You must provide the  stats endpoint as the first argument" if ARGV[0].nil?
+
+require "net/http"
+require "json"
+require "socket"
+
+PREFIX = "downloader.#{`hostname`.strip.gsub(".", "_")}"
+STATS_URL = ARGV[0]
+COMPONENTS = ["processor", "notifier"]
+GAUGES = %w(
+  processor.maxWorkers
+  processor.maxWorkerPools
+  processor.workers
+  processor.workerPools
+)
+
+def flat_hash(hash, k = [])
+  return {k => hash} unless hash.is_a?(Hash)
+  hash.inject({}){ |h, v| h.merge! flat_hash(v[-1], k + [v[0]]) }
+end
+
+COMPONENTS.each do |component|
+  res = Net::HTTP.get_response(URI("#{STATS_URL}/#{component}"))
+  abort "Non-200: #{res.code}" if res.code != "200"
+
+  stats = JSON.parse(res.body)
+  stats = Hash[flat_hash(stats).map do |k,v|
+    Integer(v)
+    key = k.map { |x| x.gsub(".", "_") }.join(".")
+    key.prepend("#{component}.")
+    key << ".gauge" if GAUGES.include?(key)
+    key.prepend("#{PREFIX}.")
+    [key, v]
+  end.compact]
+
+  ts = Time.now.to_i
+  data = ""
+  stats.each do |k, v|
+    data << "#{k} #{v} #{ts}\n"
+  end
+
+  if ARGV[1]
+    host = ARGV[1].split(":")[0]
+    port = Integer(ARGV[1].split(":")[1])
+    sock = TCPSocket.new(host, port)
+    sock.write(data)
+    sock.close
+  else
+    puts data
+  end
+end
