@@ -1,8 +1,8 @@
 ![downloader](doc/downloader-service.png)
 
-Async Rate-limited downloader https://phabricator.skroutz.gr/w/arch/downloader_ddoc/
+Async Rate-limited downloader service.
 
-See the [doc folder](doc/) for documentation.
+Visit the [wiki](wiki/) for documentation.
 
 
 API
@@ -47,8 +47,6 @@ For more see:
 ```shell
 $ make list
 ```
-
-
 
 
 
