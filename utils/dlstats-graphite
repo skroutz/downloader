@@ -71,5 +71,5 @@ loop do
       puts data
     end
   end
-  sleep EVERY
+  sleep Integer(EVERY)
 end
