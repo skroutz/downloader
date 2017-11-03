@@ -5,14 +5,16 @@
 #
 # Usage:
 #
-#   ./downloader-graphite <downloader-stats-url> <graphite-host:graphite-port>
+#   ./downloader-graphite <downloader-stats-url> <graphite-host:graphite-port> <interval-sec>
 #
 #   If graphite info isn't passed, then output will be printed
 #   to stdout instead.
 #
 # Example:
 #
-#   $ ./dlstats-graphite http://dl1.skroutz.gr:8000/stats stats.skroutz.gr:2003
+#   $ ./dlstats-graphite http://dl1.skroutz.gr:8000/stats stats.skroutz.gr:2003 5
+#
+#   This will report every 5secs. to stats.skroutz.gr
 #
 abort "You must provide the  stats endpoint as the first argument" if ARGV[0].nil?
 
@@ -29,41 +31,45 @@ GAUGES = %w(
   processor.workers
   processor.workerPools
 )
+EVERY = ARGV[2] || 5
 
 def flat_hash(hash, k = [])
   return {k => hash} unless hash.is_a?(Hash)
   hash.inject({}){ |h, v| h.merge! flat_hash(v[-1], k + [v[0]]) }
 end
 
-COMPONENTS.each do |component|
-  res = Net::HTTP.get_response(URI("#{STATS_URL}/#{component}"))
-  abort "Non-200: #{res.code}" if res.code != "200"
+loop do
+  COMPONENTS.each do |component|
+    res = Net::HTTP.get_response(URI("#{STATS_URL}/#{component}"))
+    abort "Non-200: #{res.code}" if res.code != "200"
 
-  stats = JSON.parse(res.body)
-  stats = Hash[flat_hash(stats).map do |k,v|
-    Integer(v)
-    key = k.map { |x| x.gsub(".", "_") }.join(".")
-    key.prepend("#{component}.")
-    key << ".gauge" if GAUGES.include?(key)
-    key.prepend("#{PREFIX}.")
-    [key, v]
-  end.compact]
+    stats = JSON.parse(res.body)
+    stats = Hash[flat_hash(stats).map do |k,v|
+      Integer(v)
+      key = k.map { |x| x.gsub(".", "_") }.join(".")
+      key.prepend("#{component}.")
+      key << ".gauge" if GAUGES.include?(key)
+      key.prepend("#{PREFIX}.")
+      [key, v]
+    end.compact]
 
-  ts = Time.now.to_i
-  data = ""
-  stats.each do |k, v|
-    data << "#{k} #{v} #{ts}\n"
+    ts = Time.now.to_i
+    data = ""
+    stats.each do |k, v|
+      data << "#{k} #{v} #{ts}\n"
+    end
+
+    next if data.empty?
+
+    if ARGV[1]
+      host = ARGV[1].split(":")[0]
+      port = Integer(ARGV[1].split(":")[1])
+      sock = TCPSocket.new(host, port)
+      sock.write(data)
+      sock.close
+    else
+      puts data
+    end
   end
-
-  next if data.empty?
-
-  if ARGV[1]
-    host = ARGV[1].split(":")[0]
-    port = Integer(ARGV[1].split(":")[1])
-    sock = TCPSocket.new(host, port)
-    sock.write(data)
-    sock.close
-  else
-    puts data
-  end
+  sleep EVERY
 end
