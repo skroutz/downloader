@@ -2,9 +2,11 @@ package notifier
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"expvar"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,10 +17,23 @@ import (
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/stats"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
-const maxCallbackRetries = 2
+const (
+	maxCallbackRetries = 2
+
+	statsFailedCallbacks     = "failedCallbacks"     //Counter
+	statsSuccessfulCallbacks = "successfulCallbacks" //Counter
+)
+
+var (
+	// expvar.Publish() panics if a name is already registered, hence
+	// we need to be able to override it in order to test Notifier easily.
+	// TODO: we should probably get rid of expvar to avoid such issues
+	statsID = "Notifier"
+)
 
 // CallbackInfo holds info to be posted back to the provided callback url.
 type CallbackInfo struct {
@@ -36,11 +51,13 @@ type Notifier struct {
 	Storage     *storage.Storage
 	Log         *log.Logger
 	DownloadURL *url.URL
+	StatsIntvl  time.Duration
 
 	// TODO: These should be exported
 	concurrency int
 	client      *http.Client
 	cbChan      chan job.Job
+	stats       *stats.Stats
 }
 
 // NewNotifier takes the concurrency of the notifier as an argument
@@ -54,19 +71,28 @@ func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string
 		return Notifier{}, errors.New("Notifier Concurrency must be a positive number")
 	}
 
-	return Notifier{
+	n := Notifier{
 		Storage:     s,
 		Log:         logger,
+		StatsIntvl:  5 * time.Second,
 		concurrency: concurrency,
 		client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{},
-			},
-			Timeout: time.Duration(5) * time.Second,
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
+			Timeout:   time.Duration(5) * time.Second,
 		},
 		cbChan:      make(chan job.Job),
 		DownloadURL: url,
-	}, nil
+	}
+
+	n.stats = stats.New(statsID, n.StatsIntvl, func(m *expvar.Map) {
+		// Store metrics in JSON
+		err := n.Storage.SetStats("notifier", m.String(), 2*n.StatsIntvl)
+		if err != nil {
+			n.Log.Println("Could not report stats", err)
+		}
+	})
+
+	return n, nil
 }
 
 // Start starts the Notifier loop and instruments the worker goroutines that
@@ -83,18 +109,21 @@ func (n *Notifier) Start(closeChan chan struct{}) {
 					n.Log.Printf("Notify error: %s", err)
 				}
 			}
-
 		}()
 	}
 
 	// Check Redis for jobs left in InProgress state
 	n.collectRogueCallbacks()
 
+	ctx, cancelfunc := context.WithCancel(context.Background())
+	go n.stats.Run(ctx)
+
 	for {
 		select {
 		case <-closeChan:
 			close(n.cbChan)
 			wg.Wait()
+			cancelfunc()
 			closeChan <- struct{}{}
 			return
 		default:
@@ -190,6 +219,7 @@ func (n *Notifier) Notify(j *job.Job) error {
 		return n.retryOrFail(j, err.Error())
 	}
 
+	n.stats.Add(statsSuccessfulCallbacks, 1)
 	return n.Storage.RemoveJob(j.ID)
 }
 
@@ -239,5 +269,8 @@ func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
 	j.CallbackState = job.StateFailed
 	j.CallbackMeta = strings.Join(meta, "\n")
 	n.Log.Printf("Error: Callback for %s failed: %s", j, j.CallbackMeta)
+
+	//Report stats
+	n.stats.Add(statsFailedCallbacks, 1)
 	return n.Storage.SaveJob(j)
 }

@@ -33,6 +33,7 @@ package processor
 import (
 	"context"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -47,6 +48,7 @@ import (
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/stats"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
@@ -55,6 +57,15 @@ const (
 	workerMaxInactivity = 5 * time.Second
 	backoffDuration     = 1 * time.Second
 	maxDownloadRetries  = 3
+
+	//Metric Identifiers
+	statsMaxWorkers         = "maxWorkers"         //Gauge
+	statsMaxWorkerPools     = "maxWorkerPools"     //Gauge
+	statsWorkers            = "workers"            //Gauge
+	statsWorkerPools        = "workerPools"        //Gauge
+	statsSpawnedWorkerPools = "spawnedWorkerPools" //Counter
+	statsSpawnedWorkers     = "spawnedWorkers"     //Counter
+	statsFailures           = "failures"           //Counter
 )
 
 type Processor struct {
@@ -76,8 +87,13 @@ type Processor struct {
 
 	Log *log.Logger
 
+	// Interval between each stats flush
+	StatsIntvl time.Duration
+
 	// pools contain the existing worker pools
 	pools map[string]*workerPool
+
+	stats *stats.Stats
 }
 
 // workerPool corresponds to an Aggregation. It spawns and instruments the
@@ -125,6 +141,7 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, client *
 		Storage:      storage,
 		StorageDir:   storageDir,
 		ScanInterval: scanInterval,
+		StatsIntvl:   5 * time.Second,
 		Client:       client,
 		Log:          logger,
 		pools:        make(map[string]*workerPool)}, nil
@@ -142,7 +159,18 @@ func (p *Processor) Start(closeCh chan struct{}) {
 	defer scanTicker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 
+	maxWorkerPools := new(expvar.Int)
+
 	p.collectRogueDownloads()
+
+	p.stats = stats.New("Processor", p.StatsIntvl,
+		func(m *expvar.Map) {
+			err := p.Storage.SetStats("processor", m.String(), 2*p.StatsIntvl) // Autoremove stats after 2 times the interval
+			if err != nil {
+				p.Log.Println("Could not report stats", err)
+			}
+		})
+	go p.stats.Run(ctx)
 
 PROCESSOR_LOOP:
 	for {
@@ -150,6 +178,7 @@ PROCESSOR_LOOP:
 		// An Aggregation worker pool closed due to inactivity
 		case aggrID := <-workerClose:
 			delete(p.pools, aggrID)
+			p.stats.Add(statsWorkerPools, -1)
 		// Close signal from upper layer
 		case <-closeCh:
 			cancel()
@@ -176,6 +205,14 @@ PROCESSOR_LOOP:
 						wp := p.newWorkerPool(aggr)
 						p.pools[aggrID] = &wp
 						wpWg.Add(1)
+
+						//Report Metrics
+						p.stats.Add(statsWorkerPools, 1)
+						p.stats.Add(statsSpawnedWorkerPools, 1)
+						if pools := int64(len(p.pools)); maxWorkerPools.Value() < pools {
+							maxWorkerPools.Set(pools)
+							p.stats.Set(statsMaxWorkerPools, maxWorkerPools)
+						}
 
 						go func() {
 							defer wpWg.Done()
@@ -272,10 +309,26 @@ func (p *Processor) newWorkerPool(aggr job.Aggregation) workerPool {
 // increaseWorkers atomically increases the activeWorkers counter of wp by 1
 func (wp *workerPool) increaseWorkers() {
 	atomic.AddInt32(&wp.numActiveWorkers, 1)
+
+	// Update stats
+	wp.p.stats.Add(statsSpawnedWorkers, 1)
+	wp.p.stats.Add(statsWorkers, 1)
+
+	//update max workers
+	activeWorkers := int64(wp.activeWorkers())
+	max, ok := wp.p.stats.Get(statsMaxWorkers).(*expvar.Int)
+	if ok && max.Value() >= activeWorkers {
+		return
+	}
+
+	max = new(expvar.Int)
+	max.Set(activeWorkers)
+	wp.p.stats.Set(statsMaxWorkers, max)
 }
 
 // decreaseWorkers atomically decreases the activeWorkers counter of wp by 1
 func (wp *workerPool) decreaseWorkers() {
+	wp.p.stats.Add(statsWorkers, -1)
 	atomic.AddInt32(&wp.numActiveWorkers, -1)
 }
 
@@ -379,6 +432,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
 		wp.log.Printf("perform: Error initializing download request for %s: %s", j, err)
+		wp.p.stats.Add(statsFailures, 1)
 		err = wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
 		if err != nil {
 			wp.log.Printf("perform: Error marking %s as failed: %s", j, err)
@@ -425,6 +479,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	out, err := wp.p.storageFile(j)
 	if err != nil {
 		wp.log.Printf("perform: Error creating download file for %s: %s", j, err)
+		wp.p.stats.Add(statsFailures, 1)
 		err = wp.requeueOrFail(j, fmt.Sprintf("Could not create/write to file, %v", err))
 		if err != nil {
 			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
@@ -446,6 +501,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	err = out.Sync()
 	if err != nil {
 		wp.log.Printf("perform: Error syncing download file for %s: %s", j, err)
+		wp.p.stats.Add(statsFailures, 1)
 		return
 	}
 

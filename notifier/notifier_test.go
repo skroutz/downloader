@@ -54,6 +54,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 			CallbackURL:   "http://localhost:39871/nonexistent"}, true},
 	}
 
+	statsID = "jobdeletion"
 	notifier, err := New(store, 10, logger, "http://blah.com/")
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +90,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 }
 
 func TestRogueCollection(t *testing.T) {
+	statsID = "rogue"
 	notifier, err := New(store, 10, logger, "http://blah.com/")
 	if err != nil {
 		t.Fatal(err)

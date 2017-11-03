@@ -11,12 +11,14 @@ type Config struct {
 	} `json:"api"`
 
 	Processor struct {
-		StorageDir string `json:"storage_dir"`
-		UserAgent  string `json:"user_agent"`
+		StorageDir    string `json:"storage_dir"`
+		UserAgent     string `json:"user_agent"`
+		StatsInterval int    `json:"stats_interval"`
 	} `json:"processor"`
 
 	Notifier struct {
-		DownloadURL string `json:"download_url"`
-		Concurrency int    `json:"concurrency"`
+		DownloadURL   string `json:"download_url"`
+		Concurrency   int    `json:"concurrency"`
+		StatsInterval int    `json:"stats_interval"`
 	} `json:"notifier"`
 }

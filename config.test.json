@@ -8,11 +8,11 @@
 	"processor": {
 		"storage_dir":"/tmp/",
     "user_agent": "Downloader v1",
-		"stats_interval": 5000
+		"stats_interval": 300
 	},
 	"notifier": {
 		"download_url": "http://localhost/foo",
 		"concurrency": 10,
-		"stats_interval": 5000
+		"stats_interval": 300
 	}
 }
