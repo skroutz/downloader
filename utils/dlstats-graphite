@@ -5,14 +5,14 @@
 #
 # Usage:
 #
-#   ./downloader-graphite <scratchd-stats-url> <graphite-host:graphite-port>
+#   ./downloader-graphite <downloader-stats-url> <graphite-host:graphite-port>
 #
 #   If graphite info isn't passed, then output will be printed
 #   to stdout instead.
 #
 # Example:
 #
-#   $ ./dlstats-graphite http://scratch1.skroutz.gr:4242/stats stats.skroutz.gr:2003
+#   $ ./dlstats-graphite http://dl1.skroutz.gr:8000/stats stats.skroutz.gr:2003
 #
 abort "You must provide the  stats endpoint as the first argument" if ARGV[0].nil?
 
