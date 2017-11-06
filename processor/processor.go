@@ -315,14 +315,19 @@ func (wp *workerPool) increaseWorkers() {
 	wp.p.stats.Add(statsWorkers, 1)
 
 	//update max workers
-	activeWorkers := int64(wp.activeWorkers())
+	activeWorkers, ok := wp.p.stats.Get(statsWorkers).(*expvar.Int)
+	if !ok {
+		wp.p.Log.Println("Could not get active workers from stats")
+		return
+	}
+
 	max, ok := wp.p.stats.Get(statsMaxWorkers).(*expvar.Int)
-	if ok && max.Value() >= activeWorkers {
+	if ok && max.Value() >= activeWorkers.Value() {
 		return
 	}
 
 	max = new(expvar.Int)
-	max.Set(activeWorkers)
+	max.Set(activeWorkers.Value())
 	wp.p.stats.Set(statsMaxWorkers, max)
 }
 
