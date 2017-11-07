@@ -2,7 +2,7 @@
 
 Async Rate-limited downloader service.
 
-Visit the [wiki](wiki/) for documentation.
+Visit the [wiki](../../wiki/) for documentation.
 
 
 API
