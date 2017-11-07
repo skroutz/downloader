@@ -158,7 +158,7 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, client *
 func (p *Processor) Start(closeCh chan struct{}) {
 	p.Log.Println("Starting...")
 	workerClose := make(chan string)
-	var wpWg sync.WaitGroup
+	var processorWG sync.WaitGroup
 	scanTicker := time.NewTicker(time.Duration(p.ScanInterval) * time.Second)
 	defer scanTicker.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -166,6 +166,12 @@ func (p *Processor) Start(closeCh chan struct{}) {
 	maxWorkerPools := new(expvar.Int)
 
 	p.collectRogueDownloads()
+
+	processorWG.Add(1)
+	go func() {
+		defer processorWG.Done()
+		p.reaper(ctx)
+	}()
 
 	p.stats = stats.New("Processor", p.StatsIntvl,
 		func(m *expvar.Map) {
@@ -208,7 +214,6 @@ PROCESSOR_LOOP:
 						}
 						wp := p.newWorkerPool(aggr)
 						p.pools[aggrID] = &wp
-						wpWg.Add(1)
 
 						//Report Metrics
 						p.stats.Add(statsWorkerPools, 1)
@@ -218,8 +223,9 @@ PROCESSOR_LOOP:
 							p.stats.Set(statsMaxWorkerPools, maxWorkerPools)
 						}
 
+						processorWG.Add(1)
 						go func() {
-							defer wpWg.Done()
+							defer processorWG.Done()
 							wp.start(ctx, p.StorageDir)
 							// The processor only needs to be informed about non-forced close ( without context-cancel )
 							if ctx.Err() == nil {
@@ -236,7 +242,7 @@ PROCESSOR_LOOP:
 		}
 	}
 
-	wpWg.Wait()
+	processorWG.Wait()
 	p.Log.Println("Shutting down...")
 	closeCh <- struct{}{}
 }
@@ -571,4 +577,39 @@ func (wp *workerPool) markJobFailed(j *job.Job, meta ...string) error {
 
 	// NOTE: we depend on QueuePendingCallback calling SaveJob(j)
 	return wp.p.Storage.QueuePendingCallback(j)
+}
+
+// reaper is responsible of deleting jobs ( along with their associated files ) that have
+// been reported as not needed any more.
+// It consumes using PopRip and acts on the provided job ids.
+func (p *Processor) reaper(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			p.Log.Println("Reaper Exiting... Bye!")
+			return
+		default:
+			j, err := p.Storage.PopRip()
+			if err != nil {
+				if err == storage.ErrEmptyQueue {
+					time.Sleep(backoffDuration)
+				} else {
+					p.Log.Println("Error popping job from RipQueue", err)
+				}
+				continue
+			}
+
+			filePath := path.Join(p.StorageDir, j.Path())
+			err = os.Remove(filePath)
+			if err != nil && !os.IsNotExist(err) {
+				p.Log.Printf("Error: Could not delete [%s] for job: %s, %s", filePath, j, err.Error())
+				continue
+			}
+
+			err = p.Storage.RemoveJob(j.ID)
+			if err != nil {
+				p.Log.Println(fmt.Sprintf("Error deleting job %s, %s", j, err.Error()))
+			}
+		}
+	}
 }
