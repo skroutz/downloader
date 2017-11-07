@@ -168,6 +168,9 @@ func TestResourceExists(t *testing.T) {
 			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
 				ci)
 		}
+		if ci.JobID == "" {
+			t.Fatalf("Expected JobID to be set: %#v", ci)
+		}
 	}
 
 	// Test job processing (Processor)
@@ -267,6 +270,9 @@ func TestResourceDontExist(t *testing.T) {
 		if ci.Extra != "" {
 			t.Fatalf("Expected Extra to be empty: %#v", ci)
 		}
+		if ci.JobID == "" {
+			t.Fatalf("Expected JobID to be set: %#v", ci)
+		}
 	}
 }
 
@@ -315,6 +321,9 @@ func TestTransientDownstreamError(t *testing.T) {
 		if !strings.HasPrefix(ci.DownloadURL, "http://localhost/") {
 			t.Fatalf("Expected DownloadURL to begin with 'http://localhost/': %#v",
 				ci)
+		}
+		if ci.JobID == "" {
+			t.Fatalf("Expected JobID to be set: %#v", ci)
 		}
 	}
 }

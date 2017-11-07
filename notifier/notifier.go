@@ -42,6 +42,7 @@ type CallbackInfo struct {
 	Extra       string `json:"extra"`
 	ResourceURL string `json:"resource_url"`
 	DownloadURL string `json:"download_url"`
+	JobID       string `json:"job_id"`
 }
 
 // Notifier is the the component responsible for consuming the result of jobs
@@ -246,6 +247,7 @@ func (n *Notifier) getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 		Extra:       j.Extra,
 		ResourceURL: j.URL,
 		DownloadURL: jobDownloadURL(j, *n.DownloadURL),
+		JobID:       j.ID,
 	}, nil
 }
 
