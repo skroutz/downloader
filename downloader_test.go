@@ -89,8 +89,6 @@ func TestMain(m *testing.M) {
 
 	componentsWg.Add(1)
 	go start("processor", "--config", "config.test.json")
-	// circumvent race conditions with os.Args
-	time.Sleep(100 * time.Millisecond)
 
 	componentsWg.Add(1)
 	go start("notifier", "--config", "config.test.json")
@@ -508,12 +506,16 @@ func TestLoad(t *testing.T) {
 	wg.Wait()
 }
 
+// setArgs is an atomic wrapper around os.Args. This allows us to spawn more than
+// one downloader components for testing.
+func setArgs(args []string) {
+	osArgs.Store(args)
+}
+
 // executes main() with the provided args. Strips all existing args that may
 // be test arguments or arguments to build
 func start(args ...string) {
-	mu.Lock()
-	os.Args = append(testBinary, args...)
-	mu.Unlock()
+	setArgs(append(testBinary, args...))
 
 	main()
 	componentsWg.Done()

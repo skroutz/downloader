@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -26,8 +28,9 @@ import (
 )
 
 var (
-	sigCh = make(chan os.Signal, 1)
-	cfg   Config
+	sigCh  = make(chan os.Signal, 1)
+	cfg    Config
+	osArgs atomic.Value
 )
 
 func main() {
@@ -172,9 +175,20 @@ func main() {
 		},
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(args()); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// args is a wrapper around os.Args that allows us to override them
+// for testing. Returns os.Args unless overriden.
+func args() []string {
+	override := osArgs.Load()
+	if override != nil {
+		return override.([]string)
+	}
+
+	return os.Args
 }
 
 // parseConfig extracts configuration from the provided config file and initializes redis
