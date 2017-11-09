@@ -25,6 +25,9 @@ def restart():
     sudo('systemctl restart downloader@processor.service')
     sudo('systemctl restart downloader@notifier.service')
 
+def status():
+    sudo('systemctl status downloader@*.service')
+
 def stats():
     keys = ['processor', 'notifier']
 
