@@ -1,6 +1,6 @@
-.PHONY: install build test lint vet fmt clean list
+.PHONY: install build test lint vet fmt clean
 
-install: vet fmt test
+install: fmt test
 	go install -v
 
 test:
@@ -17,6 +17,3 @@ fmt:
 
 clean:
 	go clean
-
-list:
-	@$(MAKE) -pRrq -f $(lastword $(MAKEFILE_LIST)) : 2>/dev/null | awk -v RS= -F: '/^# File/,/^# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' | sort | egrep -v -e '^[^[:alnum:]]' -e '^$@$$' | xargs
