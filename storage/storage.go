@@ -40,6 +40,7 @@ const (
 
 var (
 	// Atomically pop jobs from a sorted set (ZSET)
+	//
 	// Each job has a score that points to the time
 	// it should be executed.
 	//
@@ -48,8 +49,9 @@ var (
 	// in the future.
 	//
 	// Note that we return two different kind of errors,
-	// ERROR & RETRYLATER. We need that in order decide
-	// if we should close the worker pool.
+	// EMPTY & RETRYLATER. We need this distinction in
+	// order to decide if we should close the worker pool
+	// or just wait a bit for new jobs.
 	//
 	// Both operations are 0(1) since we operate on the
 	// left side of an ordered list.
@@ -62,7 +64,7 @@ var (
 
 		-- Empty ZSET
 		if #top == 0 then
-		return redis.error_reply("EMPTY")
+			return redis.error_reply("EMPTY")
 		end
 
 		local job = top[1]
@@ -70,7 +72,7 @@ var (
 
 		-- Job is not ready yet
 		if score > max_score then
-		return redis.error_reply("RETRYLATER")
+			return redis.error_reply("RETRYLATER")
 		end
 
 		-- We have a Job!
