@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -13,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -29,7 +27,6 @@ import (
 
 var (
 	sigCh  = make(chan os.Signal, 1)
-	cfg    Config
 	osArgs atomic.Value
 )
 
@@ -61,6 +58,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
+				cfg := Config()
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				storage, err := storage.New(redisClient("api", cfg.Redis.Addr))
@@ -100,6 +98,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
+				cfg := Config()
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				client := &http.Client{
@@ -144,6 +143,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
+				cfg := Config()
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				storage, err := storage.New(redisClient("notifier", cfg.Redis.Addr))
@@ -189,21 +189,6 @@ func args() []string {
 	}
 
 	return os.Args
-}
-
-// parseConfig extracts configuration from the provided config file and initializes redis
-// TODO: make this an ordinary helper function so we can make it return
-// a Storage and use it when we want to
-func parseConfig(c *cli.Context) error {
-	f, err := os.Open(c.String("config"))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-	dec.UseNumber()
-	return dec.Decode(&cfg)
 }
 
 func redisClient(name, addr string) *redis.Client {
