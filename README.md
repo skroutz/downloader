@@ -35,6 +35,10 @@ Accept-Encoding: gzip
 }
 ```
 
+Any 2XX response to the callback POST marks the callback as successful for the current job.
+As a special case, if a 202 response code is received the job is additionally marked for deletion as not needed any more by the client.
+This deletes the job in Redis along with its associated downloaded file.
+
 Development
 -------------------------------------------------------------------------------
 
