@@ -66,6 +66,8 @@ const (
 	statsSpawnedWorkerPools = "spawnedWorkerPools" //Counter
 	statsSpawnedWorkers     = "spawnedWorkers"     //Counter
 	statsFailures           = "failures"           //Counter
+
+	statsResponseCodePrefix = "download.response." //Counter
 )
 
 type Processor struct {
@@ -472,6 +474,9 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 	}
 
 	j.ResponseCode = resp.StatusCode
+	wp.p.Log.Println(fmt.Sprintf("Received status code %d for job: %s", resp.StatusCode, j))
+	wp.p.stats.Add(fmt.Sprintf("%s%d", statsResponseCodePrefix, resp.StatusCode), 1)
+
 	if resp.StatusCode >= http.StatusInternalServerError {
 		err = wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		if err != nil {
