@@ -9,9 +9,16 @@ $ fab -H dl1,dl2 deploy
 """
 from json import loads as json
 
+from fabric.api import env, settings, parallel
 from fabric.operations import put, sudo, local, run
 from fabric.decorators import runs_once
 from fabric.context_managers import hide
+
+@parallel
+def tail():
+    env.remote_interrupt = True
+    with settings(warn_only=True):
+        run('journalctl --unit=downloader@* --follow --lines=0', pty=True)
 
 @runs_once
 def build():
