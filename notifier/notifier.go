@@ -3,12 +3,12 @@ package notifier
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"expvar"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -33,6 +33,22 @@ var (
 	// we need to be able to override it in order to test Notifier easily.
 	// TODO: we should probably get rid of expvar to avoid such issues
 	statsID = "Notifier"
+
+	// Based on http.DefaultTransport
+	//
+	// See https://golang.org/pkg/net/http/#RoundTripper
+	notifierTransport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second, // was 30 * time.Second
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 )
 
 // CallbackInfo holds info to be posted back to the provided callback url.
@@ -78,8 +94,8 @@ func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string
 		StatsIntvl:  5 * time.Second,
 		concurrency: concurrency,
 		client: &http.Client{
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
-			Timeout:   time.Duration(5) * time.Second,
+			Transport: notifierTransport,
+			Timeout:   30 * time.Second, // Larger than Dial + TLS timeouts
 		},
 		cbChan:      make(chan job.Job),
 		DownloadURL: url,
