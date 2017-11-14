@@ -4,7 +4,8 @@ install: fmt test
 	go install -v
 
 test:
-	go test -v ./...
+	go test -v ./...; \
+	go test -race
 
 lint:
 	golint ./...
