@@ -86,7 +86,7 @@ func main() {
 				logger.Println("Bye!")
 				return nil
 			},
-			Before: parseConfig,
+			Before: parseCliConfig,
 		},
 		cli.Command{
 			Name:  "processor",
@@ -131,7 +131,7 @@ func main() {
 				processor.Log.Println("Bye!")
 				return nil
 			},
-			Before: parseConfig,
+			Before: parseCliConfig,
 		},
 		cli.Command{
 			Name:  "notifier",
@@ -172,7 +172,7 @@ func main() {
 				notifier.Log.Println("Bye!")
 				return nil
 			},
-			Before: parseConfig,
+			Before: parseCliConfig,
 		},
 		cli.Command{
 			Name:  "version",

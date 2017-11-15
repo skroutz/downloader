@@ -43,10 +43,14 @@ func Config() *config {
 	return c.(*config)
 }
 
-func parseConfig(ctx *cli.Context) error {
+func parseCliConfig(ctx *cli.Context) error {
+	return parseConfig(ctx.String("config"))
+}
+
+func parseConfig(filename string) error {
 	var c config
 
-	f, err := os.Open(ctx.String("config"))
+	f, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
