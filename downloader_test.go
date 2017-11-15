@@ -91,7 +91,7 @@ func TestMain(m *testing.M) {
 	go start("processor", "--config", "config.test.json")
 
 	// Wait for processor to start before changing os.args
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	componentsWg.Add(1)
 	go start("notifier", "--config", "config.test.json")
 
