@@ -171,6 +171,9 @@ func TestResourceExists(t *testing.T) {
 		if ci.JobID == "" {
 			t.Fatalf("Expected JobID to be set: %#v", ci)
 		}
+		if ci.ResponseCode != 200 {
+			t.Fatalf("Expected ResponseCode to be set: %#v", ci)
+		}
 	}
 
 	// Test job processing (Processor)
@@ -274,6 +277,9 @@ func TestResourceDontExist(t *testing.T) {
 		if ci.JobID == "" {
 			t.Fatalf("Expected JobID to be set: %#v", ci)
 		}
+		if ci.ResponseCode != 404 {
+			t.Fatalf("Expected ResponseCode to be set: %#v", ci)
+		}
 	}
 }
 
@@ -325,6 +331,9 @@ func TestTransientDownstreamError(t *testing.T) {
 		}
 		if ci.JobID == "" {
 			t.Fatalf("Expected JobID to be set: %#v", ci)
+		}
+		if ci.ResponseCode != 200 {
+			t.Fatalf("Expected ResponseCode to be set: %#v", ci)
 		}
 	}
 }

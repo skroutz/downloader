@@ -469,6 +469,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		return
 	}
 
+	j.ResponseCode = resp.StatusCode
 	if resp.StatusCode >= http.StatusInternalServerError {
 		err = wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
 		if err != nil {
@@ -532,6 +533,7 @@ func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
 func (wp *workerPool) markJobInProgress(j *job.Job) error {
 	j.DownloadState = job.StateInProgress
 	j.DownloadMeta = ""
+	j.ResponseCode = 0
 	return wp.p.Storage.SaveJob(j)
 }
 

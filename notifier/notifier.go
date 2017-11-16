@@ -53,12 +53,13 @@ var (
 
 // CallbackInfo holds info to be posted back to the provided callback url.
 type CallbackInfo struct {
-	Success     bool   `json:"success"`
-	Error       string `json:"error"`
-	Extra       string `json:"extra"`
-	ResourceURL string `json:"resource_url"`
-	DownloadURL string `json:"download_url"`
-	JobID       string `json:"job_id"`
+	Success      bool   `json:"success"`
+	Error        string `json:"error"`
+	Extra        string `json:"extra"`
+	ResourceURL  string `json:"resource_url"`
+	DownloadURL  string `json:"download_url"`
+	JobID        string `json:"job_id"`
+	ResponseCode int    `json:"response_code"`
 }
 
 // Notifier is the the component responsible for consuming the result of jobs
@@ -258,12 +259,13 @@ func (n *Notifier) getCallbackInfo(j *job.Job) (CallbackInfo, error) {
 	}
 
 	return CallbackInfo{
-		Success:     j.DownloadState == job.StateSuccess,
-		Error:       j.DownloadMeta,
-		Extra:       j.Extra,
-		ResourceURL: j.URL,
-		DownloadURL: jobDownloadURL(j, *n.DownloadURL),
-		JobID:       j.ID,
+		Success:      j.DownloadState == job.StateSuccess,
+		Error:        j.DownloadMeta,
+		Extra:        j.Extra,
+		ResourceURL:  j.URL,
+		DownloadURL:  jobDownloadURL(j, *n.DownloadURL),
+		JobID:        j.ID,
+		ResponseCode: j.ResponseCode,
 	}, nil
 }
 

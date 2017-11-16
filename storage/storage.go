@@ -275,6 +275,11 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			j.CallbackMeta = v
 		case "Extra":
 			j.Extra = v
+		case "ResponseCode":
+			j.ResponseCode, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
 		default:
 			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
 		}

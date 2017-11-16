@@ -56,6 +56,9 @@ type Job struct {
 	// Arbitrary info provided by the user that are posted
 	// back during the callback
 	Extra string `json:"extra"`
+
+	// Response code of the download request
+	ResponseCode int `json:"response_code"`
 }
 
 // State represents the download & callback states.
