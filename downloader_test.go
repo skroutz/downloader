@@ -14,10 +14,13 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path"
 	"reflect"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -58,8 +61,28 @@ var (
 	cbServer  = newCallbackServer(fmt.Sprintf("%s:%s", csHost, csPort), callbacks)
 )
 
+var testConfig string
+
 func TestMain(m *testing.M) {
+	// Hijack TestMain & spawn downloader, see spawn()
+	if os.Getenv("SPAWN_DOWNLOADER") != "" {
+		fmt.Printf("TestMain(spawn): %+v\n", os.Args)
+		main()
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-stop
+		cancel()
+	}()
+
+	flag.StringVar(&testConfig, "config", "config.test.json", "Test config")
 	flag.Parse()
+
 	flushRedis()
 
 	// start test file server
@@ -74,7 +97,9 @@ func TestMain(m *testing.M) {
 	waitForServer(fsPort)
 
 	// start test callback server
+	componentsWg.Add(1)
 	go func() {
+		defer componentsWg.Done()
 		err := cbServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
@@ -83,38 +108,39 @@ func TestMain(m *testing.M) {
 	waitForServer(csPort)
 
 	// start API server, Processor & Notifier
+	start := func(args ...string) {
+		defer componentsWg.Done()
+		spawn(ctx, args...)
+	}
+
 	componentsWg.Add(1)
-	go start("api", "--host", apiHost, "--port", apiPort, "--config", "config.test.json")
+	go start("api", "--host", apiHost, "--port", apiPort, "--config", testConfig)
 	waitForServer(apiPort)
 
 	componentsWg.Add(1)
-	go start("processor", "--config", "config.test.json")
+	go start("processor", "--config", testConfig)
 
-	// Wait for processor to start before changing os.args
-	time.Sleep(100 * time.Millisecond)
 	componentsWg.Add(1)
-	go start("notifier", "--config", "config.test.json")
+	go start("notifier", "--config", testConfig)
 
 	result := m.Run()
 
 	// shutdown test file server
 	log.Println("Shutting down test file server...")
-	err := fileServer.Shutdown(context.TODO())
+	err := fileServer.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// shutdown test callback server
 	log.Println("Shutting down test callback server...")
-	err = cbServer.Shutdown(context.TODO())
+	err = cbServer.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Println("Shutting down API, Processor & Notifier..")
-	sigCh <- os.Interrupt // shutdown APIServer
-	sigCh <- os.Interrupt // shutdown Processor
-	sigCh <- os.Interrupt // shutdown Notifier
+	stop <- os.Interrupt
 
 	componentsWg.Wait()
 	flushRedis()
@@ -196,6 +222,7 @@ FILECHECK:
 		case <-time.After(timeout):
 			t.Fatal("File not present on the download location after 5 seconds")
 		default:
+			parseConfig(testConfig)
 			cfg := Config()
 			relativePath := strings.TrimPrefix(downloadURI.String(), cfg.Notifier.DownloadURL)
 			filePath := path.Join(cfg.Processor.StorageDir, relativePath)
@@ -518,19 +545,34 @@ func TestLoad(t *testing.T) {
 	wg.Wait()
 }
 
-// setArgs is an atomic wrapper around os.Args. This allows us to spawn more than
-// one downloader components for testing.
-func setArgs(args []string) {
-	osArgs.Store(args)
-}
+// spawn a downloader subprocess with the provided args.
+//
+// We do that by fork-executing the test binary with the special SPAWN_DOWNLOADER environment
+// variable set. TestMain() checks for SPAWN_DOWNLOADER and executes downloader's main().
+func spawn(ctx context.Context, args ...string) {
+	var cmdWg sync.WaitGroup
 
-// executes main() with the provided args. Strips all existing args that may
-// be test arguments or arguments to build
-func start(args ...string) {
-	setArgs(append(testBinary, args...))
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Env = []string{"SPAWN_DOWNLOADER=1"}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	main()
-	componentsWg.Done()
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("spawn(%s): %v", args[0], err)
+	}
+
+	cmdWg.Add(1)
+	go func() {
+		defer cmdWg.Done()
+		if err := cmd.Wait(); err != nil {
+			log.Fatalf("spawn(%s): %v", args[0], err)
+		}
+	}()
+
+	<-ctx.Done()
+	cmd.Process.Signal(syscall.SIGTERM)
+
+	cmdWg.Wait()
 }
 
 // blocks until a server listens on the given port
