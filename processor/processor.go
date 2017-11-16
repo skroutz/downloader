@@ -144,7 +144,9 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, client *
 		StatsIntvl:   5 * time.Second,
 		Client:       client,
 		Log:          logger,
-		pools:        make(map[string]*workerPool)}, nil
+		pools:        make(map[string]*workerPool),
+		stats:        stats.New("Processor", time.Second, func(m *expvar.Map) {}),
+	}, nil
 }
 
 // Start starts p.
