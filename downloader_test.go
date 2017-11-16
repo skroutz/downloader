@@ -82,6 +82,7 @@ func TestMain(m *testing.M) {
 
 	flag.StringVar(&testConfig, "config", "config.test.json", "Test config")
 	flag.Parse()
+	parseConfig(testConfig)
 
 	flushRedis()
 
@@ -222,8 +223,6 @@ FILECHECK:
 		case <-time.After(timeout):
 			t.Fatal("File not present on the download location after 5 seconds")
 		default:
-			parseConfig(testConfig)
-			cfg := Config()
 			relativePath := strings.TrimPrefix(downloadURI.String(), cfg.Notifier.DownloadURL)
 			filePath := path.Join(cfg.Processor.StorageDir, relativePath)
 			downloaded, err = os.Open(filePath)

@@ -3,15 +3,14 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"sync/atomic"
 
 	"github.com/urfave/cli"
 )
 
-var cfg atomic.Value // *Config
+var cfg Config
 
 // Config holds the app's configuration
-type config struct {
+type Config struct {
 	Redis struct {
 		Addr string `json:"addr"`
 	} `json:"redis"`
@@ -33,23 +32,11 @@ type config struct {
 	} `json:"notifier"`
 }
 
-// Config returns the current configuration.
-func Config() *config {
-	c := cfg.Load()
-	if c == nil {
-		panic("config: No configuration found!")
-	}
-
-	return c.(*config)
-}
-
 func parseCliConfig(ctx *cli.Context) error {
 	return parseConfig(ctx.String("config"))
 }
 
 func parseConfig(filename string) error {
-	var c config
-
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -58,8 +45,7 @@ func parseConfig(filename string) error {
 
 	dec := json.NewDecoder(f)
 	dec.UseNumber()
-	dec.Decode(&c)
+	dec.Decode(&cfg)
 
-	cfg.Store(&c)
 	return nil
 }
