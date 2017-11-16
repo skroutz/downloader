@@ -4,19 +4,18 @@ Async Rate-limited downloader service.
 
 Visit the [wiki](../../wiki/) for documentation.
 
-
 API
 -------------------------------------------------------------------------------
 
 Enqueueing a new download job:
 ```shell
 $ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar"}' http://localhost:8000/download
-{"id":"NSb4FOAs9fVaQw"}
+# => {"id":"NSb4FOAs9fVaQw"}
 ```
 
 Callback requests:
 ```shell
-$ nc -l 8080
+$ nc -l -p 8080
 
 POST / HTTP/1.1
 Host: localhost:8080
@@ -25,10 +24,16 @@ Content-Length: 93
 Content-Type: application/json
 Accept-Encoding: gzip
 
-{"success":true,"error":"","extra":"foobar","download_url":"http://localhost/NSb4FOAs9fVaQw"}
+{  
+   "success":true,
+   "error":"",
+   "extra":"foobar",
+   "resource_url":"https://httpbin.org/image/png",
+   "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
+   "job_id":"6QEywYsd0jrKAg",
+   "response_code":200
+}
 ```
-
-
 
 Development
 -------------------------------------------------------------------------------
@@ -47,6 +52,3 @@ For more see:
 ```shell
 $ make list
 ```
-
-
-
