@@ -60,6 +60,7 @@ func (as *API) stats() func(http.ResponseWriter, *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write(respbytes)
 		if err != nil {
