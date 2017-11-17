@@ -103,9 +103,47 @@ func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	mux.HandleFunc("/hb", heartbeat(heartbeatPath))
 	mux.HandleFunc("/stats/", as.stats)
 	mux.HandleFunc("/retry/", as.retry)
+	mux.HandleFunc("/dashboard/aggregations", as.dashboardAggregations)
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	as.Log = logger
 	return as
+}
+
+// apiAggregations returns a JSON list of aggregations with pending jobs.
+func (as *API) dashboardAggregations(w http.ResponseWriter, r *http.Request) {
+	type aggr struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	}
+	resp := make([]aggr, 0)
+
+	iter := as.Storage.Redis.Scan(0, storage.JobsKeyPrefix+"*", 0).Iterator()
+
+	for iter.Next() {
+		a := iter.Val()
+		count, err := as.Storage.Redis.ZCount(a, "-inf", "+inf").Result()
+		if err != nil {
+			count = -1
+		}
+		resp = append(resp, aggr{a, count})
+	}
+
+	if err := iter.Err(); err != nil {
+		http.Error(w, fmt.Sprintf("Error scanning for aggregation keys: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	body, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error marshaling json: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if _, err := w.Write(body); err != nil {
+		as.Log.Print("Error writing response: ", err)
+	}
 }
 
 // ServeHTTP enqueues new downloads to the backend Redis instance
