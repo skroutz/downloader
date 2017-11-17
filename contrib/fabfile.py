@@ -22,7 +22,7 @@ def tail():
 
 @runs_once
 def build():
-    local('GOARCH=amd64 GOOS=linux go build -o downloader')
+    local('GOARCH=amd64 GOOS=linux go build -ldflags "-X main.Version=`git rev-parse HEAD`"  -o downloader')
 
 def copy():
     put('downloader', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
