@@ -26,8 +26,9 @@ import (
 )
 
 var (
-	sigCh  = make(chan os.Signal, 1)
-	osArgs atomic.Value
+	sigCh   = make(chan os.Signal, 1)
+	osArgs  atomic.Value
+	Version string
 )
 
 func main() {
@@ -172,6 +173,14 @@ func main() {
 				return nil
 			},
 			Before: parseConfig,
+		},
+		cli.Command{
+			Name:  "version",
+			Usage: "Show downloader version",
+			Action: func(c *cli.Context) error {
+				_, err := fmt.Fprintf(os.Stdout, "Downloader Version %s\n", Version)
+				return err
+			},
 		},
 	}
 
