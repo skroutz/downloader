@@ -26,7 +26,8 @@ def version():
 
 @runs_once
 def build():
-    local('GOARCH=amd64 GOOS=linux go build -ldflags "-X main.Version=`git rev-parse HEAD`"  -o downloader')
+    local('GOARCH=amd64 GOOS=linux go generate -tags embedstatic ./api')
+    local('GOARCH=amd64 GOOS=linux go build -tags embedstatic -ldflags "-X main.Version=`git rev-parse HEAD`"  -o downloader')
 
 def copy():
     put('downloader', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)

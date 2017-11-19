@@ -27,3 +27,4 @@ downloader
 dump.rdb
 vendor
 fabfile.py
+api/statik

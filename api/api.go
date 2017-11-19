@@ -104,6 +104,10 @@ func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	mux.HandleFunc("/stats/", as.stats)
 	mux.HandleFunc("/retry/", as.retry)
 	mux.HandleFunc("/dashboard/aggregations", as.dashboardAggregations)
+	if fs, err := staticFs(); err == nil {
+		mux.Handle("/", http.StripPrefix("/", http.FileServer(fs)))
+	}
+
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	as.Log = logger
 	return as
