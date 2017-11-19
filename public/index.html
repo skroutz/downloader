@@ -1,0 +1,43 @@
+<!doctype html>
+<html class="no-js" lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rate Limiting Downloader</title>
+  <link rel="stylesheet" href="css/foundation.min.css">
+</head>
+<body>
+  <div class="grid-container">
+    <div class="grid-x grid-padding-x">
+
+      <div class="large-12 cell">
+        <h1>Downloader</h1>
+      </div>
+
+      <div class="large-12 cell" id="js-liveness">
+      </div>
+
+      <div class="large-12 cell" id="js-aggregations">
+      </div>
+
+      <div class="large-12 cell" id="js-stats">
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <script src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
+
+  <script src="hosts.js"></script>
+  <script type="text/babel">
+  // Fallback to the same host if we don't have a host list
+  if (!window.Hosts) {
+    window.Hosts = [window.location.protocol + '//' + window.location.host]
+  }
+  </script>
+
+  <script type="text/babel" src="js/dashboard.js"></script>
+</body>
+</html>
