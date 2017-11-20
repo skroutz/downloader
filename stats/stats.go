@@ -35,5 +35,16 @@ func (s *Stats) Run(ctx context.Context) {
 
 // New initializes the Reporter and start Run
 func New(id string, interval time.Duration, report func(*expvar.Map)) *Stats {
-	return &Stats{expvar.NewMap(id), interval, report}
+	var statsMap *expvar.Map
+	if val := expvar.Get(id); val != nil {
+		if newmap, ok := val.(*expvar.Map); ok {
+			log.Printf("Stats for %s reinitialized!", id)
+			statsMap = newmap
+			statsMap.Init()
+		}
+	}
+	if statsMap == nil {
+		statsMap = expvar.NewMap(id)
+	}
+	return &Stats{statsMap, interval, report}
 }
