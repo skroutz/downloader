@@ -248,6 +248,8 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
 		return n.markCbFailed(j, err)
 	}
+
+	n.Log.Printf("Warn: Callback try no:%d failed for job:%s with: %s", j.CallbackCount, j, err)
 	return n.Storage.QueuePendingCallback(j)
 }
 
