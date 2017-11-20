@@ -20,6 +20,10 @@ def tail():
     with settings(warn_only=True):
         run('journalctl --unit=downloader@* --follow --lines=0', pty=True)
 
+@parallel
+def version():
+    run('/usr/local/lib/downloader/bin/downloader version')
+
 @runs_once
 def build():
     local('GOARCH=amd64 GOOS=linux go build -ldflags "-X main.Version=`git rev-parse HEAD`"  -o downloader')
