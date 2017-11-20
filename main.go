@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 
 var (
 	sigCh   = make(chan os.Signal, 1)
-	osArgs  atomic.Value
 	Version string
 )
 
@@ -59,7 +57,6 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				cfg := Config()
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				storage, err := storage.New(redisClient("api", cfg.Redis.Addr))
@@ -86,7 +83,7 @@ func main() {
 				logger.Println("Bye!")
 				return nil
 			},
-			Before: parseConfig,
+			Before: parseCliConfig,
 		},
 		cli.Command{
 			Name:  "processor",
@@ -99,7 +96,6 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				cfg := Config()
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				client := &http.Client{
@@ -131,7 +127,7 @@ func main() {
 				processor.Log.Println("Bye!")
 				return nil
 			},
-			Before: parseConfig,
+			Before: parseCliConfig,
 		},
 		cli.Command{
 			Name:  "notifier",
@@ -144,7 +140,6 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				cfg := Config()
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				storage, err := storage.New(redisClient("notifier", cfg.Redis.Addr))
@@ -172,7 +167,7 @@ func main() {
 				notifier.Log.Println("Bye!")
 				return nil
 			},
-			Before: parseConfig,
+			Before: parseCliConfig,
 		},
 		cli.Command{
 			Name:  "version",
@@ -184,20 +179,9 @@ func main() {
 		},
 	}
 
-	if err := app.Run(args()); err != nil {
+	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
-}
-
-// args is a wrapper around os.Args that allows us to override them
-// for testing. Returns os.Args unless overriden.
-func args() []string {
-	override := osArgs.Load()
-	if override != nil {
-		return override.([]string)
-	}
-
-	return os.Args
 }
 
 func redisClient(name, addr string) *redis.Client {
