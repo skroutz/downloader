@@ -40,8 +40,14 @@ end
 
 loop do
   COMPONENTS.each do |component|
-    res = Net::HTTP.get_response(URI("#{STATS_URL}/#{component}"))
-    abort "Non-200: #{res.code}" if res.code != "200"
+    url = URI("#{STATS_URL}/#{component}")
+    begin
+      res = Net::HTTP.get_response(url)
+    rescue
+      puts "Could not connect to #{url}"
+      next
+    end
+    (puts "Non-200: #{res.code}"; next) if res.code != "200"
 
     stats = JSON.parse(res.body)
     stats = Hash[flat_hash(stats).map do |k,v|
