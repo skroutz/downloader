@@ -66,8 +66,8 @@ const (
 	statsSpawnedWorkerPools = "spawnedWorkerPools" //Counter
 	statsSpawnedWorkers     = "spawnedWorkers"     //Counter
 	statsFailures           = "failures"           //Counter
-
 	statsResponseCodePrefix = "download.response." //Counter
+	statsReaperFailures     = "reaperFailures"     //Counter
 )
 
 type Processor struct {
@@ -603,12 +603,14 @@ func (p *Processor) reaper(ctx context.Context) {
 			err = os.Remove(filePath)
 			if err != nil && !os.IsNotExist(err) {
 				p.Log.Printf("Error: Could not delete [%s] for job: %s, %s", filePath, j, err.Error())
+				p.stats.Add(statsReaperFailures, 1)
 				continue
 			}
 
 			err = p.Storage.RemoveJob(j.ID)
 			if err != nil {
 				p.Log.Println(fmt.Sprintf("Error deleting job %s, %s", j, err.Error()))
+				p.stats.Add(statsReaperFailures, 1)
 			}
 		}
 	}
