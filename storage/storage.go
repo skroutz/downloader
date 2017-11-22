@@ -87,6 +87,8 @@ var (
 	ErrEmptyQueue = errors.New("Queue is empty")
 	// ErrRetryLater is returned by ZPOP when there are only future jobs in the queue
 	ErrRetryLater = errors.New("Retry again later")
+	// ErrNotFound is returned by GetJob when a requested job is not found in redis
+	ErrNotFound = errors.New("Not Found")
 )
 
 type Storage struct {
@@ -121,11 +123,18 @@ func (s *Storage) SaveJob(j *job.Job) error {
 }
 
 // GetJob fetches the job with the given id from Redis.
+// In the case of ErrNotFound, the returned job has valid ID and can be used
+// further.
 func (s *Storage) GetJob(id string) (job.Job, error) {
 	val, err := s.Redis.HGetAll(JobKeyPrefix + id).Result()
 	if err != nil {
 		return job.Job{}, err
 	}
+
+	if v, ok := val["ID"]; !ok || v == "" {
+		return job.Job{ID: id}, ErrNotFound
+	}
+
 	return jobFromMap(val)
 }
 
