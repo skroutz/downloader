@@ -517,8 +517,8 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 			j.DownloadCount--
 		}
 
-		wp.log.Printf("perform: Error writing to download file for %s: %s", j, err)
-		err = wp.requeueOrFail(j, fmt.Sprintf("Error writing to download file: %s", err))
+		wp.log.Printf("perform: Error downloading file for %s: %s", j, err)
+		err = wp.requeueOrFail(j, fmt.Sprintf("Error downloading file for %s: %s", j, err))
 		if err != nil {
 			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
 		}
