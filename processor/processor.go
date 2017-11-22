@@ -541,9 +541,9 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 // requeueOrFail checks the retry count of the current download
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
-func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
+func (wp *workerPool) requeueOrFail(j *job.Job, err string) error {
 	if j.DownloadCount >= maxDownloadRetries {
-		return wp.markJobFailed(j, meta)
+		return wp.markJobFailed(j, err)
 	}
 	return wp.p.Storage.QueuePendingDownload(j)
 }
