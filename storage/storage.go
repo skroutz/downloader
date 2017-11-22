@@ -189,7 +189,11 @@ func (s *Storage) QueuePendingCallback(j *job.Job) error {
 
 // QueueJobForDeletion pushes the provided job id to RIPQueue and returns any errors
 func (s *Storage) QueueJobForDeletion(id string) error {
-	return s.Redis.RPush(RIPQueue, id).Err()
+	z := redis.Z{
+		Member: id,
+		Score:  float64(time.Now().Unix()),
+	}
+	return s.Redis.ZAdd(RIPQueue, z).Err()
 }
 
 // PopCallback attempts to pop a Job from the callback queue.
@@ -209,24 +213,9 @@ func (s *Storage) PopJob(a *job.Aggregation) (job.Job, error) {
 // Notice: Due to the nature of job deletion, the returned job is not guaranteed to
 // be available in Redis.
 func (s *Storage) PopRip() (job.Job, error) {
-	stringCmd := s.Redis.LPop(RIPQueue)
-	if err := stringCmd.Err(); err != nil {
-		if stringCmd.Err() == redis.Nil {
-			err = ErrEmptyQueue
-		}
+	j, err := s.pop(RIPQueue)
+	if err != nil && err != ErrNotFound {
 		return job.Job{}, err
-	}
-
-	id := stringCmd.Val()
-
-	j, err := s.GetJob(stringCmd.Val())
-	if err != nil {
-		return job.Job{}, err
-	}
-
-	// job did not exist in redis
-	if j.ID == "" {
-		j.ID = id
 	}
 
 	return j, nil
