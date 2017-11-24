@@ -466,6 +466,11 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 			}
 			return
 		}
+
+		if err == context.Canceled {
+			// Do not count canceled download towards MaxRetries
+			j.DownloadCount--
+		}
 		err = wp.requeueOrFail(j, err.Error())
 		if err != nil {
 			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
@@ -506,8 +511,14 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		wp.log.Printf("perform: Error writing to download file for %s: %s", j, err)
-		err = wp.requeueOrFail(j, fmt.Sprintf("Error writing to download file: %s", err))
+
+		if err == context.Canceled {
+			// Do not count canceled download towards MaxRetries
+			j.DownloadCount--
+		}
+
+		wp.log.Printf("perform: Error downloading file for %s: %s", j, err)
+		err = wp.requeueOrFail(j, fmt.Sprintf("Error downloading file for %s: %s", j, err))
 		if err != nil {
 			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
 		}
@@ -530,9 +541,9 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 // requeueOrFail checks the retry count of the current download
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
-func (wp *workerPool) requeueOrFail(j *job.Job, meta string) error {
+func (wp *workerPool) requeueOrFail(j *job.Job, err string) error {
 	if j.DownloadCount >= maxDownloadRetries {
-		return wp.markJobFailed(j, meta)
+		return wp.markJobFailed(j, err)
 	}
 	return wp.p.Storage.QueuePendingDownload(j)
 }
