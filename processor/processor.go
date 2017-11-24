@@ -116,6 +116,13 @@ type workerPool struct {
 	jobChan chan job.Job
 }
 
+func init() {
+	// Indicates we are in test mode
+	if _, testMode := os.LookupEnv("DOWNLOADER_TEST_TIME"); testMode {
+		RetryBackoffDuration = 200 * time.Millisecond
+	}
+}
+
 // New initializes and returns a Processor, or an error if storageDir
 // is not writable.
 //

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -78,6 +79,13 @@ type Notifier struct {
 	client      *http.Client
 	cbChan      chan job.Job
 	stats       *stats.Stats
+}
+
+func init() {
+	// Indicates we are in test mode
+	if _, testMode := os.LookupEnv("DOWNLOADER_TEST_TIME"); testMode {
+		RetryBackoffDuration = 200 * time.Millisecond
+	}
 }
 
 // NewNotifier takes the concurrency of the notifier as an argument

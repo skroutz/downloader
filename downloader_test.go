@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/notifier"
-	"golang.skroutz.gr/skroutz/downloader/processor"
 )
 
 type testJob map[string]interface{}
@@ -120,11 +119,9 @@ func TestMain(m *testing.M) {
 	waitForServer(apiPort)
 
 	componentsWg.Add(1)
-	processor.RetryBackoffDuration = 200 * time.Millisecond
 	go start("processor", "--config", testConfig)
 
 	componentsWg.Add(1)
-	notifier.RetryBackoffDuration = 200 * time.Millisecond
 	go start("notifier", "--config", testConfig)
 
 	result := m.Run()
@@ -555,7 +552,7 @@ func spawn(ctx context.Context, args ...string) {
 	var cmdWg sync.WaitGroup
 
 	cmd := exec.Command(os.Args[0], args...)
-	cmd.Env = []string{"SPAWN_DOWNLOADER=1"}
+	cmd.Env = []string{"SPAWN_DOWNLOADER=1", "DOWNLOADER_TEST_TIME=1"}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
