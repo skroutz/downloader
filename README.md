@@ -33,6 +33,33 @@ Accept-Encoding: gzip
    "job_id":"6QEywYsd0jrKAg",
    "response_code":200
 }
+
+Unsuccessful Callback Examples:
+
+* Resourcce not found
+
+{
+   "success":false,
+   "error":"Received Status code 404",
+   "extra":"foobar",
+   "resource_url":"https://httpbin.org/image/png",
+   "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
+   "job_id":"6QEywYsd0jrKAg",
+   "response_code":404
+}
+
+* Invalid TLS Certificate
+
+{
+   "success":false,
+   "error":"TLS Error Occured: dial: x509: certificate signed by unknown authority ",
+   "extra":"foobar",
+   "resource_url":"https://httpbin.org/image/png",
+   "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
+   "job_id":"6QEywYsd0jrKAg",
+   "response_code":0
+}
+
 ```
 
 Any 2XX response to the callback POST marks the callback as successful for the current job.
