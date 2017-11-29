@@ -59,15 +59,16 @@ const (
 	maxDownloadRetries  = 3
 
 	//Metric Identifiers
-	statsMaxWorkers         = "maxWorkers"         //Gauge
-	statsMaxWorkerPools     = "maxWorkerPools"     //Gauge
-	statsWorkers            = "workers"            //Gauge
-	statsWorkerPools        = "workerPools"        //Gauge
-	statsSpawnedWorkerPools = "spawnedWorkerPools" //Counter
-	statsSpawnedWorkers     = "spawnedWorkers"     //Counter
-	statsFailures           = "failures"           //Counter
-	statsResponseCodePrefix = "download.response." //Counter
-	statsReaperFailures     = "reaperFailures"     //Counter
+	statsMaxWorkers                = "maxWorkers"                //Gauge
+	statsMaxWorkerPools            = "maxWorkerPools"            //Gauge
+	statsWorkers                   = "workers"                   //Gauge
+	statsWorkerPools               = "workerPools"               //Gauge
+	statsSpawnedWorkerPools        = "spawnedWorkerPools"        //Counter
+	statsSpawnedWorkers            = "spawnedWorkers"            //Counter
+	statsFailures                  = "failures"                  //Counter
+	statsResponseCodePrefix        = "download.response."        //Counter
+	statsReaperFailures            = "reaperFailures"            //Counter
+	statsReaperSuccessfulDeletions = "reaperSuccessfulDeletions" //Counter
 )
 
 type Processor struct {
@@ -611,7 +612,10 @@ func (p *Processor) reaper(ctx context.Context) {
 			if err != nil {
 				p.Log.Println(fmt.Sprintf("Error deleting job %s, %s", j, err.Error()))
 				p.stats.Add(statsReaperFailures, 1)
+				continue
 			}
+
+			p.stats.Add(statsReaperSuccessfulDeletions, 1)
 		}
 	}
 }
