@@ -267,7 +267,7 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	}
 
 	n.Log.Printf("Warn: Callback try no:%d failed for job:%s with: %s", j.CallbackCount, j, err)
-  return n.Storage.QueuePendingCallback(j, time.Duration(j.CallbackCount)*RetryBackoffDuration)
+	return n.Storage.QueuePendingCallback(j, time.Duration(j.CallbackCount)*RetryBackoffDuration)
 }
 
 // callbackInfo validates that the job is good for callback and
