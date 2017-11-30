@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"sync"
 	"testing"
 	"time"
@@ -43,6 +44,84 @@ func init() {
 	}
 
 	//defer os.RemoveAll(dir)
+}
+
+func TestReaper(t *testing.T) {
+	err := Redis.FlushDB().Err()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	processor, err := New(store, 3, storageDir, &http.Client{}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.Mkdir(path.Join(storageDir, "RIP"), os.ModePerm)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		processor.reaper(ctx)
+		wg.Done()
+	}()
+
+	cases := []struct {
+		Job     job.Job
+		InRedis bool
+	}{
+		{
+			job.Job{ID: "RIPinRedis"},
+			true,
+		},
+		{
+			job.Job{ID: "RIPGhost"},
+			false,
+		},
+	}
+
+	for _, tc := range cases {
+		if tc.InRedis {
+			err := store.SaveJob(&tc.Job)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		_, err = os.Create(path.Join(storageDir, tc.Job.Path()))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = store.QueueJobForDeletion(tc.Job.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	time.Sleep(2 * time.Second)
+	cancel()
+	wg.Wait()
+
+	for _, tc := range cases {
+		exists, err := store.JobExists(&tc.Job)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if exists {
+			t.Fatal("Expected Job not to exist in Redis")
+		}
+
+		if _, err := os.Stat(path.Join(storageDir, tc.Job.Path())); !os.IsNotExist(err) {
+			t.Fatal("Expected file not to exist")
+		}
+	}
 }
 
 func TestRogueCollection(t *testing.T) {

@@ -247,6 +247,13 @@ func (n *Notifier) Notify(j *job.Job) error {
 		return n.retryOrFail(j, err.Error())
 	}
 
+	if res.StatusCode == http.StatusAccepted {
+		err := n.Storage.QueueJobForDeletion(j.ID)
+		if err != nil {
+			n.Log.Println("Error: Could not queue job for deletion", err)
+		}
+	}
+
 	n.stats.Add(statsSuccessfulCallbacks, 1)
 	return n.Storage.RemoveJob(j.ID)
 }
@@ -258,7 +265,9 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	if j.CallbackCount >= maxCallbackRetries {
 		return n.markCbFailed(j, err)
 	}
-	return n.Storage.QueuePendingCallback(j, time.Duration(j.CallbackCount)*RetryBackoffDuration)
+
+	n.Log.Printf("Warn: Callback try no:%d failed for job:%s with: %s", j.CallbackCount, j, err)
+  return n.Storage.QueuePendingCallback(j, time.Duration(j.CallbackCount)*RetryBackoffDuration)
 }
 
 // callbackInfo validates that the job is good for callback and

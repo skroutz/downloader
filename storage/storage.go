@@ -34,6 +34,9 @@ const (
 	// separate it
 	CallbackQueue = "CallbackQueue"
 
+	// This queue contains ids of jobs to be deleted
+	RIPQueue = "JobDeletionQueue"
+
 	// Prefix for stats related entries
 	statsPrefix = "stats"
 )
@@ -84,6 +87,8 @@ var (
 	ErrEmptyQueue = errors.New("Queue is empty")
 	// ErrRetryLater is returned by ZPOP when there are only future jobs in the queue
 	ErrRetryLater = errors.New("Retry again later")
+	// ErrNotFound is returned by GetJob when a requested job is not found in redis
+	ErrNotFound = errors.New("Not Found")
 )
 
 type Storage struct {
@@ -118,11 +123,18 @@ func (s *Storage) SaveJob(j *job.Job) error {
 }
 
 // GetJob fetches the job with the given id from Redis.
+// In the case of ErrNotFound, the returned job has valid ID and can be used
+// further.
 func (s *Storage) GetJob(id string) (job.Job, error) {
 	val, err := s.Redis.HGetAll(JobKeyPrefix + id).Result()
 	if err != nil {
 		return job.Job{}, err
 	}
+
+	if v, ok := val["ID"]; !ok || v == "" {
+		return job.Job{ID: id}, ErrNotFound
+	}
+
 	return jobFromMap(val)
 }
 
@@ -178,6 +190,15 @@ func (s *Storage) QueuePendingCallback(j *job.Job, delay time.Duration) error {
 	return s.Redis.ZAdd(CallbackQueue, z).Err()
 }
 
+// QueueJobForDeletion pushes the provided job id to RIPQueue and returns any errors
+func (s *Storage) QueueJobForDeletion(id string) error {
+	z := redis.Z{
+		Member: id,
+		Score:  float64(time.Now().Unix()),
+	}
+	return s.Redis.ZAdd(RIPQueue, z).Err()
+}
+
 // PopCallback attempts to pop a Job from the callback queue.
 // If it succeeds the job with the popped ID is returned.
 func (s *Storage) PopCallback() (job.Job, error) {
@@ -188,6 +209,19 @@ func (s *Storage) PopCallback() (job.Job, error) {
 // If it succeeds the job with the popped ID is returned.
 func (s *Storage) PopJob(a *job.Aggregation) (job.Job, error) {
 	return s.pop(JobsKeyPrefix + a.ID)
+}
+
+// PopRip fetches a job from the RIPQueue ( if any ) and reports any errors.
+// If the queue is empty an ErrEmptyQueue error is returned.
+// Notice: Due to the nature of job deletion, the returned job is not guaranteed to
+// be available in Redis.
+func (s *Storage) PopRip() (job.Job, error) {
+	j, err := s.pop(RIPQueue)
+	if err != nil && err != ErrNotFound {
+		return job.Job{}, err
+	}
+
+	return j, nil
 }
 
 // GetAggregation fetches from Redis the aggregation denoted by id. If the
