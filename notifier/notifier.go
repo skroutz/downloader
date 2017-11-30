@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -33,6 +34,8 @@ var (
 	// we need to be able to override it in order to test Notifier easily.
 	// TODO: we should probably get rid of expvar to avoid such issues
 	statsID = "Notifier"
+
+	RetryBackoffDuration = 10 * time.Minute
 
 	// Based on http.DefaultTransport
 	//
@@ -76,6 +79,13 @@ type Notifier struct {
 	client      *http.Client
 	cbChan      chan job.Job
 	stats       *stats.Stats
+}
+
+func init() {
+	// Indicates we are in test mode
+	if _, testMode := os.LookupEnv("DOWNLOADER_TEST_TIME"); testMode {
+		RetryBackoffDuration = 200 * time.Millisecond
+	}
 }
 
 // NewNotifier takes the concurrency of the notifier as an argument
@@ -191,7 +201,7 @@ func (n *Notifier) collectRogueCallbacks() {
 					n.Log.Printf("Could not get job for Redis: %v", err)
 					continue
 				}
-				err = n.Storage.QueuePendingCallback(&jb)
+				err = n.Storage.QueuePendingCallback(&jb, 0)
 				if err != nil {
 					n.Log.Printf("Could not queue job for download: %v", err)
 					continue
@@ -257,7 +267,7 @@ func (n *Notifier) retryOrFail(j *job.Job, err string) error {
 	}
 
 	n.Log.Printf("Warn: Callback try no:%d failed for job:%s with: %s", j.CallbackCount, j, err)
-	return n.Storage.QueuePendingCallback(j)
+  return n.Storage.QueuePendingCallback(j, time.Duration(j.CallbackCount)*RetryBackoffDuration)
 }
 
 // callbackInfo validates that the job is good for callback and

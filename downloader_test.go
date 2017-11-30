@@ -552,7 +552,7 @@ func spawn(ctx context.Context, args ...string) {
 	var cmdWg sync.WaitGroup
 
 	cmd := exec.Command(os.Args[0], args...)
-	cmd.Env = []string{"SPAWN_DOWNLOADER=1"}
+	cmd.Env = []string{"SPAWN_DOWNLOADER=1", "DOWNLOADER_TEST_TIME=1"}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

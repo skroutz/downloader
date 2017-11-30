@@ -52,7 +52,7 @@ func TestPendingJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = storage.QueuePendingDownload(&testJob)
+	err = storage.QueuePendingDownload(&testJob, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

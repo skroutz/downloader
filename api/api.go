@@ -148,7 +148,7 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		as.Log.Printf("Created aggregation %v for %s", *aggr, j)
 	}
 
-	err = as.Storage.QueuePendingDownload(j)
+	err = as.Storage.QueuePendingDownload(j, 0)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error queueing %s: %s", j, err),
 			http.StatusInternalServerError)
