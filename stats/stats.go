@@ -46,5 +46,9 @@ func New(id string, interval time.Duration, report func(*expvar.Map)) *Stats {
 	if statsMap == nil {
 		statsMap = expvar.NewMap(id)
 	}
+
+	// serve as liveness indicator for modules registering metrics
+	statsMap.Add("alive", 1)
+
 	return &Stats{statsMap, interval, report}
 }

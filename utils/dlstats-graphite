@@ -12,11 +12,11 @@
 #
 # Example:
 #
-#   $ ./dlstats-graphite http://dl1.skroutz.gr:8000/stats stats.skroutz.gr:2003 5
+#   $ ./dlstats-graphite http://dl1.skroutz.gr/stats stats.skroutz.gr:2003 5
 #
 #   This will report every 5secs. to stats.skroutz.gr
 #
-abort "You must provide the  stats endpoint as the first argument" if ARGV[0].nil?
+abort "You must provide the stats endpoint as the first argument" if ARGV[0].nil?
 
 require "net/http"
 require "json"
@@ -24,6 +24,7 @@ require "socket"
 
 PREFIX = "downloader.#{`hostname`.strip.gsub(".", "_")}"
 STATS_URL = ARGV[0]
+ALIVE_SUFFIX = "alive"
 COMPONENTS = ["processor", "notifier"]
 GAUGES = %w(
   processor.maxWorkers
@@ -31,6 +32,11 @@ GAUGES = %w(
   processor.workers
   processor.workerPools
 )
+
+COMPONENTS.each do |cmp|
+  GAUGES.push "#{cmp}.#{ALIVE_SUFFIX}"
+end
+
 EVERY = ARGV[2] || 5
 
 def flat_hash(hash, k = [])
