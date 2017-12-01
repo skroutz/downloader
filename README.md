@@ -51,8 +51,3 @@ Running the tests:
 ```shell
 $ make test
 ```
-
-For more see:
-```shell
-$ make list
-```
