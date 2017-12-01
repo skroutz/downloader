@@ -58,7 +58,7 @@ loop do
     stats = JSON.parse(res.body)
     stats = Hash[flat_hash(stats).map do |k,v|
       Integer(v)
-      key = k.map { |x| x.gsub(".", "_") }.join(".")
+      key = k.join(".")
       key.prepend("#{component}.")
       key << ".gauge" if GAUGES.include?(key)
       key.prepend("#{PREFIX}.")
