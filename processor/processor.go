@@ -165,23 +165,17 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, client *
 
 // Start starts p.
 //
-// It scans Redis for new Aggregations and spawns the corresponding worker
-// pools when needed.
+// It spawns helpers goroutines & starts spawning worker pools by scanning Redis for new Aggregations
 func (p *Processor) Start(closeCh chan struct{}) {
 	p.Log.Println("Starting...")
-	workerClose := make(chan string)
-	var processorWG sync.WaitGroup
-	scanTicker := time.NewTicker(time.Duration(p.ScanInterval) * time.Second)
-	defer scanTicker.Stop()
-	ctx, cancel := context.WithCancel(context.Background())
-
-	maxWorkerPools := new(expvar.Int)
-
 	p.collectRogueDownloads()
 
-	processorWG.Add(1)
+	ctx, cancel := context.WithCancel(context.TODO())
+
+	var processorWg sync.WaitGroup
+	processorWg.Add(1)
 	go func() {
-		defer processorWG.Done()
+		defer processorWg.Done()
 		p.reaper(ctx)
 	}()
 
@@ -194,7 +188,37 @@ func (p *Processor) Start(closeCh chan struct{}) {
 		})
 	go p.stats.Run(ctx)
 
+	processorWg.Add(1)
+	go func() {
+		defer processorWg.Done()
+		p.spawnPools(ctx)
+	}()
+
 PROCESSOR_LOOP:
+	for {
+		select {
+		case <-closeCh:
+			cancel()
+			break PROCESSOR_LOOP
+		}
+	}
+
+	p.Log.Println("Shutting down...")
+	processorWg.Wait()
+	closeCh <- struct{}{}
+}
+
+// spawnPools spawns & monitors worker pools. When ctx is done, it forcibly stops all workers,
+// cleanups the pools map & waits for all goroutines to finish.
+func (p *Processor) spawnPools(ctx context.Context) {
+	workerClose := make(chan string)
+	var poolWg sync.WaitGroup
+	scanTicker := time.NewTicker(time.Duration(p.ScanInterval) * time.Second)
+	defer scanTicker.Stop()
+
+	maxWorkerPools := new(expvar.Int)
+
+POOLS_LOOP:
 	for {
 		select {
 		// An Aggregation worker pool closed due to inactivity
@@ -202,9 +226,11 @@ PROCESSOR_LOOP:
 			delete(p.pools, aggrID)
 			p.stats.Add(statsWorkerPools, -1)
 		// Close signal from upper layer
-		case <-closeCh:
-			cancel()
-			break PROCESSOR_LOOP
+		//
+		// Note that we don't have to explicitly cancel the spawned worker pools
+		// since they share the same context.
+		case <-ctx.Done():
+			break POOLS_LOOP
 		case <-scanTicker.C:
 			var cursor uint64
 			for {
@@ -235,9 +261,9 @@ PROCESSOR_LOOP:
 							p.stats.Set(statsMaxWorkerPools, maxWorkerPools)
 						}
 
-						processorWG.Add(1)
+						poolWg.Add(1)
 						go func() {
-							defer processorWG.Done()
+							defer poolWg.Done()
 							wp.start(ctx, p.StorageDir)
 							// The processor only needs to be informed about non-forced close ( without context-cancel )
 							if ctx.Err() == nil {
@@ -254,9 +280,11 @@ PROCESSOR_LOOP:
 		}
 	}
 
-	processorWG.Wait()
-	p.Log.Println("Shutting down...")
-	closeCh <- struct{}{}
+	poolWg.Wait()
+	// All worker pools have stopped, it's safe to empty the pool.
+	for k := range p.pools {
+		delete(p.pools, k)
+	}
 }
 
 func (p *Processor) storageFile(j *job.Job) (*os.File, error) {
