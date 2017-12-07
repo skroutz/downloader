@@ -48,12 +48,14 @@ import (
 	"time"
 
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/processor/diskcheck"
 	"golang.skroutz.gr/skroutz/downloader/stats"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
 var (
 	RetryBackoffDuration = 2 * time.Minute
+	newChecker           = diskcheck.New
 )
 
 // TODO: these should all be configuration options provided by the caller
@@ -73,6 +75,11 @@ const (
 	statsResponseCodePrefix        = "download.response."        //Counter
 	statsReaperFailures            = "reaperFailures"            //Counter
 	statsReaperSuccessfulDeletions = "reaperSuccessfulDeletions" //Counter
+
+	// diskChecker settings
+	diskHigh     = 95
+	diskLow      = 90
+	diskInterval = 1 * time.Minute
 )
 
 type Processor struct {
@@ -188,22 +195,51 @@ func (p *Processor) Start(closeCh chan struct{}) {
 		})
 	go p.stats.Run(ctx)
 
+	var diskChecker diskcheck.Checker
+	diskChecker, err := newChecker(p.StorageDir, diskHigh, diskLow, diskInterval)
+	if err != nil {
+		p.Log.Println("Error initializing disk checker: ", err)
+	}
 	processorWg.Add(1)
 	go func() {
 		defer processorWg.Done()
-		p.spawnPools(ctx)
+		diskChecker.Run(ctx)
 	}()
+
+	// Spawn worker pools loop with a seperate context
+	// so we can stop it indepentetly.
+	var loopWg sync.WaitGroup
+	loopCtx, loopCancel := context.WithCancel(context.TODO())
+	spawnLoop := func() {
+		defer loopWg.Done()
+		p.spawnPools(loopCtx)
+	}
+	loopWg.Add(1)
+	go spawnLoop()
 
 PROCESSOR_LOOP:
 	for {
 		select {
+		case health := <-diskChecker.C():
+			if health == diskcheck.Sick {
+				p.Log.Println("Sick disk, stopping the worker pool loop...")
+				loopCancel()
+				loopWg.Wait()
+			} else {
+				p.Log.Println("Healthy disk, starting the worker pool loop...")
+				loopCtx, loopCancel = context.WithCancel(context.TODO())
+				loopWg.Add(1)
+				go spawnLoop()
+			}
 		case <-closeCh:
+			loopCancel()
 			cancel()
 			break PROCESSOR_LOOP
 		}
 	}
 
 	p.Log.Println("Shutting down...")
+	loopWg.Wait()
 	processorWg.Wait()
 	closeCh <- struct{}{}
 }

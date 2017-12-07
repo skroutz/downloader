@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -14,14 +15,16 @@ import (
 
 	"github.com/go-redis/redis"
 	"golang.skroutz.gr/skroutz/downloader/job"
+	"golang.skroutz.gr/skroutz/downloader/processor/diskcheck"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
 var (
-	storageDir string
-	Redis      *redis.Client
-	store      *storage.Storage
-	logger     = log.New(os.Stderr, "[test processor]", log.Ldate|log.Ltime|log.Lshortfile)
+	storageDir  string
+	Redis       *redis.Client
+	store       *storage.Storage
+	testChecker *dummyDiskChecker
+	logger      = log.New(os.Stderr, "[test processor]", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 func init() {
@@ -43,7 +46,44 @@ func init() {
 		log.Fatal(err)
 	}
 
+	// Bypass the actual diskchecker with our dummy one
+	testChecker = &dummyDiskChecker{
+		c:      make(chan diskcheck.Health, 100),
+		health: true,
+	}
+	newChecker = func(string, int, int, time.Duration) (diskcheck.Checker, error) { return testChecker, nil }
+
 	//defer os.RemoveAll(dir)
+
+}
+
+type dummyDiskChecker struct {
+	health diskcheck.Health
+	c      chan diskcheck.Health
+}
+
+func (d *dummyDiskChecker) Healthy() {
+	if d.health == diskcheck.Healthy {
+		return
+	}
+	d.health = diskcheck.Healthy
+	d.c <- diskcheck.Healthy
+}
+
+func (d *dummyDiskChecker) Sick() {
+	if d.health == diskcheck.Sick {
+		return
+	}
+	d.health = diskcheck.Sick
+	d.c <- diskcheck.Sick
+}
+
+func (d *dummyDiskChecker) C() chan diskcheck.Health {
+	return d.c
+}
+
+func (d *dummyDiskChecker) Run(ctx context.Context) {
+	<-ctx.Done()
 }
 
 func TestReaper(t *testing.T) {
@@ -176,6 +216,87 @@ func TestRogueCollection(t *testing.T) {
 			t.Fatalf("Expected job state Pending, found %s", j.DownloadState)
 		}
 	}
+}
+
+func TestChecker(t *testing.T) {
+	err := Redis.FlushDB().Err()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	processor, err := New(store, 3, storageDir, &http.Client{}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeChan := make(chan struct{})
+	go processor.Start(closeChan)
+
+	// At the beginning the disk health is "healthy" (our convention). By
+	// calling Sick() we change its health to "sick".
+	// At this state we test that no jobs will be processed.
+	testChecker.Sick()
+	time.Sleep(10 * time.Millisecond)
+
+	a, _ := job.NewAggregation("foobar", 2)
+	store.SaveAggregation(a)
+
+	jobs := []job.Job{
+		job.Job{
+			ID:     "id1",
+			AggrID: a.ID,
+		},
+		job.Job{
+			ID:     "id2",
+			AggrID: a.ID,
+		},
+	}
+
+	for _, job := range jobs {
+		err = store.QueuePendingDownload(&job, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	enqueueTime := fmt.Sprintf("%f", float64(time.Now().Unix()))
+	time.Sleep(time.Second)
+
+	jobCounter := func() int {
+
+		// Using the enqueueTime as the max in ZCount we make sure that the
+		// jobs have been processed at least once.
+		c, err := store.Redis.ZCount(storage.JobsKeyPrefix+a.ID, "-inf", enqueueTime).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return int(c)
+	}
+
+	c := jobCounter()
+	if c != len(jobs) {
+		t.Fatalf("No jobs should have been processed. Expected: %d, got: %d", len(jobs), c)
+	}
+
+	// The disk health is now "sick" because we have used Sick() before to set
+	// it. By calling Healthy() we will change the disk health to "healthy".
+	// At this state we test that all jobs can be processed.
+	testChecker.Healthy()
+
+	for i := 0; i < 10; i++ {
+		if c = jobCounter(); c == 0 {
+			break
+		}
+
+		time.Sleep(time.Second)
+	}
+
+	if c != 0 {
+		t.Fatalf("All the jobs should have been processed. Expected: %d, got: %d", 0, c)
+	}
+
+	closeChan <- struct{}{}
+	<-closeChan
 }
 
 //TODO: placeholder func to test perform for all its (edge) cases
