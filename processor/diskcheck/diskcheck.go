@@ -25,21 +25,25 @@ var statfs = syscall.Statfs
 // changes.
 //
 // The interface describes two main concepts:
-// - Run: The component's main loop which loops between the health state
-// functions. The running function implicates the current disk health.
-// - C: The health state communication channel used by the processor.
+// 	* Run: The component's main loop which loops between the health state
+// 	functions. The running function implicates the current disk health.
+//
+// 	* C: The health state communication channel used by the processor.
 //
 // Useful implementation details:
-// - waitForHealthy, waitForSick: health state monitoring functions that report
-// back to the channel when the state changes. They can be canceled with ctx.
-// - diskUsage: the disk usage percentage.
-// - Healthy/Sick: the disk health state.
+// 	* waitForHealthy, waitForSick: health state monitoring functions that report
+// 	  back to the channel when the state changes. They can be canceled with ctx.
+//
+// 	* diskUsage: the disk usage percentage.
+//
+// 	* Healthy/Sick: the disk health state.
 //
 // We need to stall the worker pools when the hd capacity drops below a
 // threshold and restart them when we have again enough hd capacity.
-// The processor reads from the communication channel the health state.
-// Our approach implicitly considers that the disk checker will only
+// To achieve that, the processor reads from the communication channel the health
+// state. Our approach implicitly considers that the disk checker will only
 // write to the channel when there is a health state change.
+//
 // The health checking functions execution order determines the current health
 // state, which enables us to keep the implementation free from saving states.
 type Checker interface {
@@ -68,7 +72,8 @@ type diskChecker struct {
 type diskUsage int
 
 // Health represents the disk health state.
-// We are using two constants to describe the disk health sick and healthy.
+//
+// We are using two constants to describe the disk health: sick and healthy.
 type Health bool
 
 func (h Health) String() string {
