@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+
+	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
 )
 
 const (
@@ -59,6 +61,9 @@ type Job struct {
 
 	// Response code of the download request
 	ResponseCode int `json:"response_code"`
+
+	// Mime type pattern provided by the client
+	MimeType string `json:"mime_type"`
 }
 
 // State represents the download & callback states.
@@ -117,7 +122,13 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 		j.Extra = extra
 	}
 
-	return nil
+	mime, ok := tmp["mime_type"].(string)
+	if !ok {
+		return errors.New("MimeType pattern must be a string")
+	}
+	j.MimeType = mime
+
+	return mimetype.ValidateMimeTypePattern(mime)
 }
 
 func (j Job) String() string {
