@@ -360,7 +360,7 @@ func TestPerformUserAgent(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		wp := processor.newWorkerPool(*aggr)
-		wp.perform(context.TODO(), j)
+		wp.perform(context.TODO(), j, nil)
 	}()
 
 	actual := <-ua
