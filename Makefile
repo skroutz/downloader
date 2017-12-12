@@ -5,7 +5,7 @@ install: fmt test
 
 test:
 	go test -race
-	go test -race ./notifier ./processor ./api ./stats
+	go test -race ./notifier ./processor ./api ./stats ./processor/diskcheck
 
 lint:
 	golint ./...
