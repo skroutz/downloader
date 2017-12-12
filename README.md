@@ -9,7 +9,7 @@ API
 
 Enqueueing a new download job:
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar"}' http://localhost:8000/download
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar", "mime_type": "!image/psd,image/*"}' http://localhost:8000/download
 # => {"id":"NSb4FOAs9fVaQw"}
 ```
 
@@ -58,6 +58,18 @@ Unsuccessful Callback Examples:
    "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
    "job_id":"6QEywYsd0jrKAg",
    "response_code":0
+}
+
+* Mime Type mismatch
+
+{
+   "success":false,
+   "error":"Expected mime-type to be (image/jpeg), found (image/png)",
+   "extra":"foobar",
+   "resource_url":"https://httpbin.org/image/png",
+   "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
+   "job_id":"6QEywYsd0jrKAg",
+   "response_code":200
 }
 
 ```
