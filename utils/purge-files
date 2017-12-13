@@ -23,6 +23,7 @@ STDIN.each do |line|
   if dry_run
     puts fullpath if File.exist?(fullpath)
   else
+    puts "Deleting file [#{fullpath}]"
     File.delete(fullpath) rescue nil
   end
 end
