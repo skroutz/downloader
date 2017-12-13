@@ -239,6 +239,7 @@ func (n *Notifier) Notify(j *job.Job) error {
 		return n.markCbFailed(j, err.Error())
 	}
 
+	n.Log.Println("Performing callback request for", j, "...")
 	res, err := n.client.Post(j.CallbackURL, "application/json", bytes.NewBuffer(cb))
 	if err != nil || res.StatusCode < 200 || res.StatusCode >= 300 {
 		if err == nil {
