@@ -8,6 +8,12 @@
   version = "v6.7.4"
 
 [[projects]]
+  name = "github.com/rakyll/magicmime"
+  packages = ["."]
+  revision = "9b99294d6b2216897632b9734769d8ce4568681e"
+  version = "v0.1.0"
+
+[[projects]]
   name = "github.com/urfave/cli"
   packages = ["."]
   revision = "a14d7d367bc02b1f57d88de97926727f2d936387"
@@ -16,6 +22,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5c6758ed805b34f00168ed2ffee7acba46d16ee6429668d438c811916acbb01f"
+  inputs-digest = "37f7bd3c310ce94580c93748572d901f24988864f3f87a54625ec777c421d1cd"
   solver-name = "gps-cdcl"
   solver-version = 1
