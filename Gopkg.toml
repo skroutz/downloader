@@ -4,5 +4,5 @@
 
 [[constraint]]
   name = "github.com/go-redis/redis"
-  version = "=6.7.2"
+  version = "=6.7.4"
 

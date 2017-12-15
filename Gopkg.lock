@@ -4,8 +4,8 @@
 [[projects]]
   name = "github.com/go-redis/redis"
   packages = [".","internal","internal/consistenthash","internal/hashtag","internal/pool","internal/proto"]
-  revision = "35248155a505a84811be81a2aab1c423317447be"
-  version = "v6.7.2"
+  revision = "e5e021257bfc6d5fbf0beac33e30194311fb189f"
+  version = "v6.7.4"
 
 [[projects]]
   name = "github.com/urfave/cli"
@@ -16,6 +16,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "badf409cd8bb1ff7fd0746845ab357600d1230a6e104bc6fa6e8181057c95efc"
+  inputs-digest = "5c6758ed805b34f00168ed2ffee7acba46d16ee6429668d438c811916acbb01f"
   solver-name = "gps-cdcl"
   solver-version = 1
