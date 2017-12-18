@@ -45,27 +45,25 @@ func heartbeat(path string) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func (as *API) stats() func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := path.Base(r.RequestURI)
+func (as *API) stats(w http.ResponseWriter, r *http.Request) {
+	id := path.Base(r.RequestURI)
 
-		respbytes, err := as.Storage.GetStats(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if respbytes == nil {
-			http.Error(w, fmt.Sprintf("Could not find stats for entity %s", id), http.StatusNotFound)
-			return
-		}
+	respbytes, err := as.Storage.GetStats(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if respbytes == nil {
+		http.Error(w, fmt.Sprintf("Could not find stats for entity %s", id), http.StatusNotFound)
+		return
+	}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.WriteHeader(http.StatusOK)
-		_, err = w.Write(respbytes)
-		if err != nil {
-			as.Log.Println("Error reporting stats:", err)
-		}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(respbytes)
+	if err != nil {
+		as.Log.Println("Error reporting stats:", err)
 	}
 }
 
@@ -75,7 +73,7 @@ func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)
 	mux.HandleFunc("/hb", heartbeat(heartbeatPath))
-	mux.HandleFunc("/stats/", as.stats())
+	mux.HandleFunc("/stats/", as.stats)
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	as.Log = logger
 	return as
