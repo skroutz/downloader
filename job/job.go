@@ -122,13 +122,21 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 		j.Extra = extra
 	}
 
-	mime, ok := tmp["mime_type"].(string)
-	if !ok {
-		return errors.New("MimeType pattern must be a string")
+	m, ok := tmp["mime_type"]
+	if ok {
+		// Since mime_type is optional, if it is not in the json doc
+		// set it to the default ""
+		if mime, ok := m.(string); ok {
+			j.MimeType = mime
+			err = mimetype.ValidateMimeTypePattern(mime)
+		} else {
+			err = errors.New("MimeType pattern must be a string")
+		}
+		return err
 	}
-	j.MimeType = mime
+	j.MimeType = ""
 
-	return mimetype.ValidateMimeTypePattern(mime)
+	return nil
 }
 
 func (j Job) String() string {
