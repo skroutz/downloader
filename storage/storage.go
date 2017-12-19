@@ -254,6 +254,23 @@ func (s *Storage) RemoveAggregation(id string) error {
 	return s.Redis.Del(AggrKeyPrefix + id).Err()
 }
 
+// RetryCallback resets a job's callback state and injects it back to the
+// callback queue.
+// If the job is not found, an error is returned.
+func (s *Storage) RetryCallback(j *job.Job) error {
+	exists, err := s.JobExists(j)
+	if err != nil {
+		return fmt.Errorf("Could not check Job existence: %s", err)
+	}
+	if !exists {
+		return errors.New("Job doesn't exist in Redis:" + j.ID)
+	}
+
+	j.CallbackMeta = ""
+	j.CallbackCount = 0
+	return s.QueuePendingCallback(j, 0)
+}
+
 func jobToMap(j *job.Job) (map[string]interface{}, error) {
 	out := make(map[string]interface{})
 

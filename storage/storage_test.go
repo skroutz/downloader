@@ -75,3 +75,34 @@ func TestPendingJob(t *testing.T) {
 		t.Error("Wrong job popped")
 	}
 }
+
+func TestRetryCallback(t *testing.T) {
+	testJob := job.Job{ID: "TestJob", CallbackState: job.StateFailed}
+
+	err := storage.SaveJob(&testJob)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = storage.RetryCallback(&testJob)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queuedJob, err := storage.PopCallback()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queuedJob.ID != testJob.ID {
+		t.Error("Expected to have injected the job to the callback queue")
+	}
+
+	if queuedJob.CallbackState != job.StatePending {
+		t.Errorf("Expected callback state: %s, got: %s",
+			job.StatePending, queuedJob.CallbackState)
+	}
+	if queuedJob.CallbackCount != 0 {
+		t.Errorf("Expected callback count to be: %d, got: %d",
+			0, queuedJob.CallbackCount)
+	}
+}

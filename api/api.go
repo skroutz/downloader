@@ -67,6 +67,34 @@ func (as *API) stats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (as *API) retry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := path.Base(r.URL.Path)
+	j, err := as.Storage.GetJob(id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching %s from Redis: %s", id, err),
+			http.StatusBadRequest)
+		return
+	}
+
+	if j.CallbackState != job.StateFailed {
+		http.Error(w, fmt.Sprintf("Error with callback state of the job %s: %s", j, j.CallbackState),
+			http.StatusBadRequest)
+		return
+	}
+
+	err = as.Storage.RetryCallback(&j)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error rescheduling callback for job with id '%s': %s", id, err), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	logger *log.Logger) *API {
 	as := &API{Storage: s}
@@ -74,6 +102,7 @@ func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	mux.Handle("/download", as)
 	mux.HandleFunc("/hb", heartbeat(heartbeatPath))
 	mux.HandleFunc("/stats/", as.stats)
+	mux.HandleFunc("/retry/", as.retry)
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
 	as.Log = logger
 	return as

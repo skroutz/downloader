@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/go-redis/redis"
+	"golang.skroutz.gr/skroutz/downloader/job"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
@@ -69,6 +70,39 @@ func TestHandler(t *testing.T) {
 			if !(len(v["id"]) > 0) {
 				t.Fatalf("Expected to receive a valid job id, got %s", body)
 			}
+		}
+	}
+}
+
+func TestRetryHandler(t *testing.T) {
+	testcases := map[string]int{
+		`AqUCDp0PUWAKAw`: http.StatusNoContent,
+		`PendingState`:   http.StatusBadRequest,
+		`NonExisting`:    http.StatusBadRequest,
+		``:               http.StatusBadRequest,
+	}
+
+	testJob1 := job.Job{ID: "AqUCDp0PUWAKAw", CallbackState: job.StateFailed}
+	testJob2 := job.Job{ID: "PendingState", CallbackState: job.StatePending}
+	as := New(store, "example.com", 80, "", logger)
+	err := as.Storage.SaveJob(&testJob1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = as.Storage.SaveJob(&testJob2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for id, expected := range testcases {
+		req := httptest.NewRequest("POST", "/retry/"+id, nil)
+		rr := httptest.NewRecorder()
+		handler := http.HandlerFunc(as.retry)
+		handler.ServeHTTP(rr, req)
+		result := rr.Result()
+
+		if result.StatusCode != expected {
+			t.Errorf("Expected status code %d, got %d (%s)", expected, result.StatusCode, id)
 		}
 	}
 }
