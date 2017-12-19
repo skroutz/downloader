@@ -161,7 +161,7 @@ func TestResourceExists(t *testing.T) {
 		"aggr_limit":   1,
 		"url":          resourceURL,
 		"callback_url": callbackURL(),
-		"mime_type":    "!image/psd,image/jpeg",
+		"mime_type":    "!image/vnd.adobe.photoshop,image/jpeg",
 		"extra":        "foobar"}
 
 	err = postJob(jobData)

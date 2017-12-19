@@ -33,7 +33,7 @@ func TestWhitelist(t *testing.T) {
 }
 
 func TestBlacklistOnly(t *testing.T) {
-	validator.Reset("!image/psd,!image/png")
+	validator.Reset("!image/vnd.adobe.photoshop,!image/png")
 
 	in, err := os.Open("../../testdata/load-test.jpg")
 	if err != nil {
@@ -81,7 +81,7 @@ func TestPatternValidation(t *testing.T) {
 	tc := map[string]bool{
 		"image/*":            true,
 		"!application/xml":   true,
-		"!image/psd,image/*": true,
+		"!image/vnd.adobe.photoshop,image/*": true,
 		"":                   true,
 		"[]a]":               false,
 		"\\":                 false,
@@ -97,8 +97,8 @@ func TestPatternValidation(t *testing.T) {
 }
 
 func TestCheck(t *testing.T) {
-	mime := "image/psd"
-	check := Check{"image/psd", true}
+	mime := "image/vnd.adobe.photoshop"
+	check := Check{"image/vnd.adobe.photoshop", true}
 	if check.IsValid(mime) {
 		t.Fatal("Should be invalid")
 	}

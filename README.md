@@ -9,7 +9,7 @@ API
 
 Enqueueing a new download job:
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar", "mime_type": "!image/psd,image/*"}' http://localhost:8000/download
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*"}' http://localhost:8000/download
 # => {"id":"NSb4FOAs9fVaQw"}
 ```
 
