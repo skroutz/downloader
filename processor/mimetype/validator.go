@@ -37,7 +37,7 @@ type Check struct {
 // Error returns the error string for the current ErrMimeTypeMismatch.
 func (e ErrMimeTypeMismatch) Error() string {
 	if e.check.negate {
-		return fmt.Sprintf("Expected mime type not to be (%s) found - (%s)", e.check.check, e.found)
+		return fmt.Sprintf("Expected mime-type not to be (%s) found - (%s)", e.check.check, e.found)
 	} else {
 		return fmt.Sprintf("Expected mime-type to be (%s), found (%s)", e.check.check, e.found)
 	}
