@@ -554,6 +554,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
 			err = wp.markJobFailed(j, fmt.Sprintf("TLS Error occured: %s", err))
+			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "tls"), 1)
 			if err != nil {
 				wp.log.Printf("perform: Error marking %s failed: %s", j, err)
 			}
@@ -564,6 +565,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 			// Do not count canceled download towards MaxRetries
 			j.DownloadCount--
 		}
+		wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "other"), 1)
 		err = wp.requeueOrFail(j, err.Error())
 		if err != nil {
 			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
@@ -616,6 +618,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 		err = validator.Read(io.TeeReader(resp.Body, out))
 		if err != nil {
 			if _, ok := err.(mimetype.ErrMimeTypeMismatch); ok {
+				wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "mime"), 1)
 				err = wp.markJobFailed(j, err.Error())
 			} else {
 				err = wp.requeueOrFail(j, err.Error())
