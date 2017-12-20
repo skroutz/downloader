@@ -9,7 +9,7 @@ API
 
 Enqueueing a new download job:
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar"}' http://localhost:8000/download
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"http://localhost:8080", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*"}' http://localhost:8000/download
 # => {"id":"NSb4FOAs9fVaQw"}
 ```
 
@@ -33,6 +33,45 @@ Accept-Encoding: gzip
    "job_id":"6QEywYsd0jrKAg",
    "response_code":200
 }
+
+Unsuccessful Callback Examples:
+
+* Resourcce not found
+
+{
+   "success":false,
+   "error":"Received Status code 404",
+   "extra":"foobar",
+   "resource_url":"https://httpbin.org/image/png",
+   "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
+   "job_id":"6QEywYsd0jrKAg",
+   "response_code":404
+}
+
+* Invalid TLS Certificate
+
+{
+   "success":false,
+   "error":"TLS Error Occured: dial: x509: certificate signed by unknown authority ",
+   "extra":"foobar",
+   "resource_url":"https://httpbin.org/image/png",
+   "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
+   "job_id":"6QEywYsd0jrKAg",
+   "response_code":0
+}
+
+* Mime Type mismatch
+
+{
+   "success":false,
+   "error":"Expected mime-type to be (image/jpeg), found (image/png)",
+   "extra":"foobar",
+   "resource_url":"https://httpbin.org/image/png",
+   "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
+   "job_id":"6QEywYsd0jrKAg",
+   "response_code":200
+}
+
 ```
 
 Any 2XX response to the callback POST marks the callback as successful for the current job.

@@ -161,6 +161,7 @@ func TestResourceExists(t *testing.T) {
 		"aggr_limit":   1,
 		"url":          resourceURL,
 		"callback_url": callbackURL(),
+		"mime_type":    "!image/vnd.adobe.photoshop,image/jpeg",
 		"extra":        "foobar"}
 
 	err = postJob(jobData)
@@ -305,6 +306,40 @@ func TestResourceDontExist(t *testing.T) {
 		}
 		if ci.ResponseCode != 404 {
 			t.Fatalf("Expected ResponseCode to be set: %#v", ci)
+		}
+	}
+}
+
+func TestMimeTypeMismatch(t *testing.T) {
+	var ci notifier.CallbackInfo
+
+	resourceURL := downloadURL("tiny.png")
+	job := testJob{
+		"aggr_id":      "foobar",
+		"aggr_limit":   1,
+		"url":          resourceURL,
+		"callback_url": callbackURL(),
+		"mime_type":    "image/jpeg",
+	}
+
+	err := postJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-time.After(timeout):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-callbacks:
+		err := json.Unmarshal(cb, &ci)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if ci.Success {
+			t.Fatal("Expected Success to be false")
+		}
+		if !strings.HasPrefix(ci.Error, "Expected mime-type") {
+			t.Fatalf("Expected Error to start with Expected mime-type': %s", ci.Error)
 		}
 	}
 }
@@ -454,6 +489,11 @@ func TestStats(t *testing.T) {
 	wg.Wait()
 }
 
+type jobAttrs struct {
+	url  string
+	mime string
+}
+
 func TestLoad(t *testing.T) {
 	nreqs := 300
 	naggrs := 5
@@ -469,12 +509,13 @@ func TestLoad(t *testing.T) {
 
 	rand.Seed(time.Now().Unix())
 
-	genJob := func(url string) testJob {
+	genJob := func(attrs jobAttrs) testJob {
 		return testJob{
 			"aggr_id":      aggrs[rand.Intn(len(aggrs))],
 			"aggr_limit":   limit,
-			"url":          downloadURL(url),
+			"url":          downloadURL(attrs.url),
 			"callback_url": callbackURL(),
+			"mime_type":    attrs.mime,
 			"extra":        "foo"}
 	}
 
@@ -482,15 +523,15 @@ func TestLoad(t *testing.T) {
 		t.Fatalf("nreqs must be an even number, was %d", nreqs)
 	}
 
-	downloads := make(chan string, nreqs)
+	attrs := make(chan jobAttrs, nreqs)
 
 	// API client pool
 	for i := 0; i < 60; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for dl := range downloads {
-				err := postJob(genJob(dl))
+			for attr := range attrs {
+				err := postJob(genJob(attr))
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -498,11 +539,12 @@ func TestLoad(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < nreqs/2; i++ {
-		downloads <- "load-test.jpg"
-		downloads <- "i-dont-exist.foo"
+	for i := 0; i < nreqs/3; i++ {
+		attrs <- jobAttrs{"load-test.jpg", "image/jpeg"}
+		attrs <- jobAttrs{"load-test.jpg", "image/png"}
+		attrs <- jobAttrs{"i-dont-exist.foo", ""}
 	}
-	close(downloads)
+	close(attrs)
 
 	var ci notifier.CallbackInfo
 	results := make(map[bool]int, nreqs)
@@ -533,11 +575,11 @@ func TestLoad(t *testing.T) {
 		}
 	}
 
-	if results[true] != nreqs/2 {
+	if results[true] != nreqs/3 {
 		t.Fatalf("Expected %d successful downloads, got %d", nreqs/2, results[true])
 	}
 
-	if results[false] != nreqs/2 {
+	if results[false] != 2*nreqs/3 {
 		t.Fatalf("Expected %d failed downloads, got %d", nreqs/2, results[false])
 	}
 

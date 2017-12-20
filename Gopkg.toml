@@ -6,3 +6,6 @@
   name = "github.com/go-redis/redis"
   version = "=6.7.4"
 
+[[constraint]]
+  name = "github.com/rakyll/imagicmime"
+  version = "=0.1.0"

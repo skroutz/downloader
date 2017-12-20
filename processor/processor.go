@@ -49,6 +49,7 @@ import (
 
 	"golang.skroutz.gr/skroutz/downloader/job"
 	"golang.skroutz.gr/skroutz/downloader/processor/diskcheck"
+	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
 	"golang.skroutz.gr/skroutz/downloader/stats"
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
@@ -389,7 +390,8 @@ func (p *Processor) newWorkerPool(aggr job.Aggregation) workerPool {
 		aggr:    aggr,
 		jobChan: make(chan job.Job),
 		p:       p,
-		log:     log.New(os.Stderr, logPrefix, log.Ldate|log.Ltime)}
+		log:     log.New(os.Stderr, logPrefix, log.Ldate|log.Ltime),
+	}
 }
 
 // increaseWorkers atomically increases the activeWorkers counter of wp by 1
@@ -494,6 +496,15 @@ WORKERPOOL_LOOP:
 func (wp *workerPool) work(ctx context.Context, saveDir string) {
 	lastActive := time.Now()
 
+	//initialize a validator to be used by the current worker
+	validator, err := mimetype.New()
+	if err != nil {
+		wp.log.Println("Error: Could not create new validator", err)
+		return
+	}
+
+	defer validator.Close()
+
 	for {
 		select {
 		case job, ok := <-wp.jobChan:
@@ -501,7 +512,7 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 				return
 			}
 
-			wp.perform(ctx, &job)
+			wp.perform(ctx, &job, validator)
 			lastActive = time.Now()
 		default:
 			if time.Since(lastActive) > workerMaxInactivity {
@@ -516,7 +527,7 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 
 // perform downloads the resource denoted by j.URL and updates its state in
 // Redis accordingly. It may retry downloading on certain errors.
-func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
+func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimetype.Validator) {
 	err := wp.markJobInProgress(j)
 	if err != nil {
 		wp.log.Printf("perform: Error marking %s as in-progress: %s", j, err)
@@ -590,6 +601,32 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job) {
 		return
 	}
 	defer out.Close()
+
+	if j.MimeType != "" {
+		if validator == nil {
+			wp.p.Log.Printf("Error: No available mime type validator, %s", j)
+			// This is problably an error on our side so do not bump the download count
+			j.DownloadCount--
+			wp.requeueOrFail(j, "MimeType validator: nil")
+			return
+		}
+		validator.Reset(j.MimeType)
+
+		// Use TeeReader to copy reads to the output file
+		err = validator.Read(io.TeeReader(resp.Body, out))
+		if err != nil {
+			if _, ok := err.(mimetype.ErrMimeTypeMismatch); ok {
+				err = wp.markJobFailed(j, err.Error())
+			} else {
+				err = wp.requeueOrFail(j, err.Error())
+			}
+
+			if err != nil {
+				wp.log.Printf("perform: storage error during for %s: %s", j, err)
+			}
+			return
+		}
+	}
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
