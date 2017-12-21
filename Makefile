@@ -4,8 +4,7 @@ install: fmt test
 	go install -v
 
 test:
-	go test -race
-	go test -race ./notifier/... ./processor/... ./api/... ./stats/... ./storage/...
+	go test -race -p 1 ./...
 
 lint:
 	golint ./...
