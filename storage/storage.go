@@ -83,6 +83,32 @@ var (
 		return job
 		`)
 
+	// Atomically delete the aggregation key
+	//
+	// Every aggregation has a corresponding job. Before deleting an
+	// aggregation we want to ensure that there are no related jobs in the
+	// jobs queue.
+	//
+	// The operation has to be executed atomically since a new job may be
+	// added right before we delete the aggregation, leaving the newly added
+	// job with no aggregation.
+	delaggr = redis.NewScript(`
+			local jobsKey = KEYS[1]
+			local aggrKey = KEYS[2]
+
+			-- Get number of jobs in the queue
+			local count = redis.call("zcount", jobsKey, "-inf", "+inf")
+
+			-- Job queue is not empty
+			if count > 0 then
+			  return 0
+			end
+
+			-- Remove aggregation
+			redis.call("del", aggrKey)
+			return 1
+		`)
+
 	// ErrEmptyQueue is returned by ZPOP when there is no job in the queue
 	ErrEmptyQueue = errors.New("Queue is empty")
 	// ErrRetryLater is returned by ZPOP when there are only future jobs in the queue
@@ -245,13 +271,13 @@ func (s *Storage) SaveAggregation(a *job.Aggregation) error {
 	return s.Redis.HSet(AggrKeyPrefix+a.ID, "Limit", a.Limit).Err()
 }
 
-// Remove deletes the aggregation key from Redis
-// It does not remove the jobs list for the aggregation
-// since we never want to lose track of already queued jobs
-//
-// TODO: Unused?
+// RemoveAggregation deletes the aggregation key from Redis
 func (s *Storage) RemoveAggregation(id string) error {
-	return s.Redis.Del(AggrKeyPrefix + id).Err()
+	_, err := delaggr.Run(s.Redis, []string{JobsKeyPrefix + id, AggrKeyPrefix + id}).Result()
+	if err != nil {
+		return fmt.Errorf("Could not delaggr: %s", err)
+	}
+	return nil
 }
 
 // RetryCallback resets a job's callback state and injects it back to the

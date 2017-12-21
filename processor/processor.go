@@ -514,6 +514,11 @@ WORKERPOOL_LOOP:
 		}
 	}
 
+	err := wp.p.Storage.RemoveAggregation(wp.aggr.ID)
+	if err != nil {
+		wp.log.Printf("Error removing aggregation: %s", err)
+	}
+
 	close(wp.jobChan)
 	wg.Wait()
 

@@ -112,3 +112,35 @@ func TestRetryCallback(t *testing.T) {
 			0, queuedJob.CallbackCount)
 	}
 }
+
+func TestRemoveAggregationWithNoJobs(t *testing.T) {
+	Redis.FlushDB()
+
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8)
+	storage.SaveAggregation(testAggr)
+	err := storage.RemoveAggregation(testAggr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists, _ := storage.AggregationExists(testAggr)
+	if exists {
+		t.Error("Expected aggregation to have been deleted", err)
+	}
+}
+
+func TestRemoveAggregationWithJobs(t *testing.T) {
+	Redis.FlushDB()
+
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8)
+	storage.SaveAggregation(testAggr)
+	storage.QueuePendingDownload(&testJob, 0)
+
+	err := storage.RemoveAggregation(testAggr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists, _ := storage.AggregationExists(testAggr)
+	if !exists {
+		t.Error("Expected aggregation to exist", err)
+	}
+}
