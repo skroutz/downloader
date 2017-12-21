@@ -552,6 +552,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 	wp.log.Println("Performing request for", j, "...")
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
+		wp.p.Log.Printf("perform: Error downloading job %s: %s", j, err)
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
 			err = wp.markJobFailed(j, fmt.Sprintf("TLS Error occured: %s", err))
 			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "tls"), 1)
@@ -574,7 +575,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 	}
 
 	j.ResponseCode = resp.StatusCode
-	wp.p.Log.Println(fmt.Sprintf("Received status code %d for job: %s", resp.StatusCode, j))
+	wp.p.Log.Printf("Received status code %d for job: %s", resp.StatusCode, j)
 	wp.p.stats.Add(fmt.Sprintf("%s%d", statsResponseCodePrefix, resp.StatusCode), 1)
 
 	if resp.StatusCode >= http.StatusInternalServerError {
@@ -619,6 +620,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 		if err != nil {
 			if _, ok := err.(mimetype.ErrMimeTypeMismatch); ok {
 				wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "mime"), 1)
+				wp.p.Log.Printf("perform: Error validationg mime type for %s: %s", j, err)
 				err = wp.markJobFailed(j, err.Error())
 			} else {
 				err = wp.requeueOrFail(j, err.Error())
