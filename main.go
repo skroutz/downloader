@@ -101,7 +101,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				logger := log.New(os.Stderr, "[procebssor] ", log.Ldate|log.Ltime)
+				logger := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
 				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, logger)
 				if err != nil {
 					return err
