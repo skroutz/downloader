@@ -92,7 +92,7 @@ func TestReaper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := New(store, 3, storageDir, &http.Client{}, logger)
+	processor, err := New(store, 3, storageDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestRogueCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := New(store, 3, storageDir, &http.Client{}, logger)
+	processor, err := New(store, 3, storageDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestChecker(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := New(store, 3, storageDir, &http.Client{}, logger)
+	processor, err := New(store, 3, storageDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +350,7 @@ func TestPerformUserAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := New(store, 3, storageDir, &http.Client{}, logger)
+	processor, err := New(store, 3, storageDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

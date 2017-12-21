@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
@@ -98,15 +97,12 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				client := &http.Client{
-					Transport: &http.Transport{TLSClientConfig: &tls.Config{}},
-					Timeout:   10 * time.Second}
 				storage, err := storage.New(redisClient("processor", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
-				logger := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
-				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, client, logger)
+				logger := log.New(os.Stderr, "[procebssor] ", log.Ldate|log.Ltime)
+				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, logger)
 				if err != nil {
 					return err
 				}

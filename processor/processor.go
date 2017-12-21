@@ -38,6 +38,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -57,6 +58,22 @@ import (
 var (
 	RetryBackoffDuration = 2 * time.Minute
 	newChecker           = diskcheck.New
+
+	// Based on http.DefaultTransport
+	//
+	// See https://golang.org/pkg/net/http/#RoundTripper
+	httpTransport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second, // was 30 * time.Second
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   4 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 )
 
 // TODO: these should all be configuration options provided by the caller
@@ -136,7 +153,7 @@ func init() {
 // is not writable.
 //
 // TODO: only add REQUIRED arguments, the rest should be set from the struct
-func New(storage *storage.Storage, scanInterval int, storageDir string, client *http.Client, logger *log.Logger) (Processor, error) {
+func New(storage *storage.Storage, scanInterval int, storageDir string, logger *log.Logger) (Processor, error) {
 	// verify we can write to storageDir
 	//
 	// TODO: create an error type to wrap these errors
@@ -157,6 +174,11 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, client *
 	err = os.Remove(tmpf.Name())
 	if err != nil {
 		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
+	}
+
+	client := &http.Client{
+		Transport: httpTransport,
+		Timeout:   10 * time.Second, // Larger than Dial + TLS timeout
 	}
 
 	return Processor{
