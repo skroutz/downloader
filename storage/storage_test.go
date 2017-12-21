@@ -31,6 +31,8 @@ func init() {
 }
 
 func TestSaveJob(t *testing.T) {
+	Redis.FlushDB()
+
 	err := storage.SaveJob(&testJob)
 	if err != nil {
 		t.Fatal(err)
@@ -47,6 +49,8 @@ func TestSaveJob(t *testing.T) {
 }
 
 func TestPendingJob(t *testing.T) {
+	Redis.FlushDB()
+
 	err := storage.SaveJob(&testJob)
 	if err != nil {
 		t.Fatal(err)
@@ -77,6 +81,8 @@ func TestPendingJob(t *testing.T) {
 }
 
 func TestRetryCallback(t *testing.T) {
+	Redis.FlushDB()
+
 	testJob := job.Job{ID: "TestJob", CallbackState: job.StateFailed}
 
 	err := storage.SaveJob(&testJob)
