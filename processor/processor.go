@@ -32,6 +32,7 @@ package processor
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"expvar"
 	"fmt"
@@ -73,6 +74,12 @@ var (
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   4 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		// Bypass tls errors with a few upstream servers (local error: tls: no renegotiation)
+		// We will allow a single server-initiated renegotiation attempt
+		// See:
+		// https://golang.org/pkg/crypto/tls/#RenegotiationSupport
+		// https://github.com/golang/go/issues/5742
+		TLSClientConfig: &tls.Config{Renegotiation: tls.RenegotiateOnceAsClient},
 	}
 )
 
