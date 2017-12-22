@@ -652,6 +652,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 				wp.p.Log.Printf("perform: Error validationg mime type for %s: %s", j, err)
 				err = wp.markJobFailed(j, err.Error())
 			} else {
+				wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
 				err = wp.requeueOrFail(j, err.Error())
 			}
 
@@ -668,6 +669,8 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 		if err == context.Canceled {
 			// Do not count canceled download towards MaxRetries
 			j.DownloadCount--
+		} else {
+			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
 		}
 
 		wp.log.Printf("perform: Error downloading file for %s: %s", j, err)
