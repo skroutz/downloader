@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"log"
 	"testing"
 
@@ -142,5 +143,25 @@ func TestRemoveAggregationWithJobs(t *testing.T) {
 	exists, _ := storage.AggregationExists(testAggr)
 	if !exists {
 		t.Error("Expected aggregation to exist", err)
+	}
+}
+
+func TestGetAggregation(t *testing.T) {
+	Redis.FlushDb()
+
+	existingAggr, _ := job.NewAggregation("existingID", 8)
+	storage.SaveAggregation(existingAggr)
+	testCases := []string{
+		existingAggr.ID,
+		"nonExistingID",
+	}
+
+	for _, id := range testCases {
+		t.Run(fmt.Sprintf("%s", id), func(t *testing.T) {
+			_, err := storage.GetAggregation(id)
+			if err != ErrNotFound && err != nil {
+				t.Errorf("Expected to fetch the aggregation", err)
+			}
+		})
 	}
 }

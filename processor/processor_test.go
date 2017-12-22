@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"sync"
@@ -368,6 +369,45 @@ func TestPerformUserAgent(t *testing.T) {
 		t.Fatalf("Expected User-Agent to be %s, got %s", processor.UserAgent, actual)
 	}
 	wg.Wait()
+}
+
+func TestJobWithNoAggregation(t *testing.T) {
+	Redis.FlushDB().Err()
+
+	processor, err := New(store, 1, storageDir, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqs := make(chan struct{}, 1)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqs <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer s.Close()
+	testJob := &job.Job{
+		ID:  "jdsk231",
+		URL: s.URL,
+
+		// This aggregation hasn't been stored in Redis
+		AggrID: "baz",
+	}
+	err = store.QueuePendingDownload(testJob, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeChan := make(chan struct{})
+	go processor.Start(closeChan)
+
+	select {
+	// The job has been processed and a download request has been sent.
+	case <-reqs:
+	// The timeout represents the maximum allowed processing time for the job.
+	case <-time.After(time.Second * 5):
+		t.Fatal("Expected job to have been processed")
+	}
+
+	closeChan <- struct{}{}
+	<-closeChan
 }
 
 // blocks until a server listens on the given port

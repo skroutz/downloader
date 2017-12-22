@@ -39,6 +39,9 @@ const (
 
 	// Prefix for stats related entries
 	statsPrefix = "stats"
+
+	// The default aggregation limit
+	aggrDefaultLimit = 4
 )
 
 var (
@@ -113,7 +116,8 @@ var (
 	ErrEmptyQueue = errors.New("Queue is empty")
 	// ErrRetryLater is returned by ZPOP when there are only future jobs in the queue
 	ErrRetryLater = errors.New("Retry again later")
-	// ErrNotFound is returned by GetJob when a requested job is not found in redis
+	// ErrNotFound is returned by GetJob and GetAggregation when a requested
+	// job, or aggregation respectively is not found in Redis.
 	ErrNotFound = errors.New("Not Found")
 )
 
@@ -250,10 +254,15 @@ func (s *Storage) PopRip() (job.Job, error) {
 	return j, nil
 }
 
-// GetAggregation fetches from Redis the aggregation denoted by id. If the
-// aggregation was not found, an error is returned.
+// GetAggregation fetches from Redis the aggregation denoted by id.
+// In the case of ErrNotFound, the returned aggregation has valid ID and the
+// default limit.
 func (s *Storage) GetAggregation(id string) (job.Aggregation, error) {
 	val, err := s.Redis.HGet(AggrKeyPrefix+id, "Limit").Result()
+	if err == redis.Nil {
+		return job.Aggregation{ID: id, Limit: aggrDefaultLimit}, ErrNotFound
+	}
+
 	if err != nil {
 		return job.Aggregation{}, err
 	}
