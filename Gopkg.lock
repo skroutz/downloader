@@ -4,8 +4,8 @@
 [[projects]]
   name = "github.com/go-redis/redis"
   packages = [".","internal","internal/consistenthash","internal/hashtag","internal/pool","internal/proto"]
-  revision = "e5e021257bfc6d5fbf0beac33e30194311fb189f"
-  version = "v6.7.4"
+  revision = "9c885d5ba8a22f260badcffde1649915fbeebfc0"
+  version = "v6.7.5"
 
 [[projects]]
   name = "github.com/rakyll/magicmime"
@@ -22,6 +22,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "37f7bd3c310ce94580c93748572d901f24988864f3f87a54625ec777c421d1cd"
+  inputs-digest = "71c4471b41c8f054abbb302aa3206221ac8dd6c096e5033f023c7ea347c9ac1d"
   solver-name = "gps-cdcl"
   solver-version = 1
