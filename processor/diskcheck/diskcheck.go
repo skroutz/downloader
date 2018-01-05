@@ -73,7 +73,7 @@ type diskUsage int
 
 // Health represents the disk health state.
 //
-// We are using two constants to describe the disk health: sick and healthy.
+// We are using two constants to describe the disk health: Sick and Healthy.
 type Health bool
 
 func (h Health) String() string {
