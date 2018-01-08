@@ -358,15 +358,14 @@ POOLS_LOOP:
 	}
 }
 
-func (p *Processor) storageFile(j *job.Job) (*os.File, error) {
-	jobPath := path.Join(p.StorageDir, j.Path())
+func (p *Processor) storagePath(j *job.Job) string {
+	return path.Join(p.StorageDir, j.Path())
+}
 
-	err := os.MkdirAll(filepath.Dir(jobPath), os.FileMode(0755))
-	if err != nil {
-		return nil, err
-	}
+const tmpFileExt = ".tmp"
 
-	return os.Create(jobPath)
+func (p *Processor) tmpStoragePath(j *job.Job) string {
+	return path.Join(p.StorageDir, j.ID+tmpFileExt)
 }
 
 // collectRogueDownloads Scans Redis for jobs that have InProgress DownloadState.
@@ -604,9 +603,9 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		return DownloadError{fmt.Errorf("Received status code %s", resp.Status), "processing response", false, false}
 	}
 
-	out, err := wp.p.storageFile(j)
+	out, err := os.Create(wp.p.tmpStoragePath(j))
 	if err != nil {
-		return DownloadError{err, "creating output file", true, true}
+		return DownloadError{err, "creating tmp file", true, true}
 	}
 	defer out.Close()
 
@@ -632,8 +631,16 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 	}
 
 	if err = out.Sync(); err != nil {
-		wp.p.stats.Add(statsFailures, 1)
 		return DownloadError{err, "syncing to disk", true, true}
+	}
+
+	path := wp.p.storagePath(j)
+	if err = os.MkdirAll(filepath.Dir(path), os.FileMode(0755)); err != nil {
+		return DownloadError{err, "creating download directory", true, true}
+	}
+
+	if err = os.Rename(out.Name(), path); err != nil {
+		return DownloadError{err, "moving file to perm location", true, true}
 	}
 
 	return nil
@@ -642,13 +649,14 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 // perform downloads the resource denoted by j.URL and updates its state in
 // Redis accordingly. It may retry downloading on certain errors.
 func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimetype.Validator) {
-	if err := wp.markJobInProgress(j); err != nil {
+	var err error
+	if err = wp.markJobInProgress(j); err != nil {
 		wp.log.Printf("perform: Error marking %s as in-progress: %s", j, err)
 		return
 	}
 	j.DownloadCount++
 
-	if err := wp.download(ctx, j, validator); err != nil {
+	if err = wp.download(ctx, j, validator); err != nil {
 		de, ok := err.(DownloadError)
 		if !ok {
 			panic("Unknown error type received from download")
@@ -658,6 +666,10 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 		// or the request context was cancelled
 		if de.err == context.Canceled || de.internal {
 			j.DownloadCount--
+		}
+
+		if de.internal {
+			wp.p.stats.Add(statsFailures, 1)
 		}
 
 		if de.retriable {
@@ -670,27 +682,8 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 			}
 		}
 
-		err := os.Remove(tmp.Name())
-		if err != nil {
-			wp.log.Printf("perform: Error deleting temp file %s, %s, %s", tmp.Name(), j, err)
-		}
-		return
-	}
-
-	path, err := wp.p.storageFile(j)
-	if err != nil {
-		wp.log.Printf("perform: Error retrieving storage file for job %s: %s", j, err)
-		if err = wp.markJobFailed(j, err.Error()); err != nil {
-			wp.log.Printf("perform: Error marking %s Failed: %s", j, err)
-		}
-		return
-	}
-
-	err = os.Rename(tmp.Name(), path)
-	if err != nil {
-		wp.log.Printf("perform: Error moving file %s, for job %s, %s", tmp.Name(), j, err)
-		if err = wp.markJobFailed(j, err.Error()); err != nil {
-			wp.log.Printf("perform: Error marking %s Failed: %s", j, err)
+		if err := os.Remove(wp.p.tmpStoragePath(j)); err != nil && !os.IsNotExist(err) {
+			wp.log.Printf("perform: Error deleting temp file %s, %s, %s", wp.p.tmpStoragePath(j), j, err)
 		}
 		return
 	}
