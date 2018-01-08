@@ -313,8 +313,13 @@ POOLS_LOOP:
 					if _, ok := p.pools[aggrID]; !ok {
 						aggr, err := p.Storage.GetAggregation(aggrID)
 						if err != nil {
-							p.Log.Printf("Error fetching aggregation with id '%s': %s", aggrID, err)
-							continue
+							p.Log.Printf("Error fetching aggregation with id '%s': %s",
+								aggrID, err)
+							if err != storage.ErrNotFound {
+								continue
+							}
+							p.Log.Printf("Using aggregation with id '%s', and limit: %d",
+								aggr.ID, aggr.Limit)
 						}
 						wp := p.newWorkerPool(aggr)
 						p.pools[aggrID] = &wp
@@ -512,6 +517,11 @@ WORKERPOOL_LOOP:
 			wp.jobChan <- job
 			downloads++
 		}
+	}
+
+	err := wp.p.Storage.RemoveAggregation(wp.aggr.ID)
+	if err != nil {
+		wp.log.Printf("Error removing aggregation: %s", err)
 	}
 
 	close(wp.jobChan)

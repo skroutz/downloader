@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"log"
 	"testing"
 
@@ -31,6 +32,8 @@ func init() {
 }
 
 func TestSaveJob(t *testing.T) {
+	Redis.FlushDB()
+
 	err := storage.SaveJob(&testJob)
 	if err != nil {
 		t.Fatal(err)
@@ -47,6 +50,8 @@ func TestSaveJob(t *testing.T) {
 }
 
 func TestPendingJob(t *testing.T) {
+	Redis.FlushDB()
+
 	err := storage.SaveJob(&testJob)
 	if err != nil {
 		t.Fatal(err)
@@ -77,6 +82,8 @@ func TestPendingJob(t *testing.T) {
 }
 
 func TestRetryCallback(t *testing.T) {
+	Redis.FlushDB()
+
 	testJob := job.Job{ID: "TestJob", CallbackState: job.StateFailed}
 
 	err := storage.SaveJob(&testJob)
@@ -104,5 +111,57 @@ func TestRetryCallback(t *testing.T) {
 	if queuedJob.CallbackCount != 0 {
 		t.Errorf("Expected callback count to be: %d, got: %d",
 			0, queuedJob.CallbackCount)
+	}
+}
+
+func TestRemoveAggregationWithNoJobs(t *testing.T) {
+	Redis.FlushDB()
+
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8)
+	storage.SaveAggregation(testAggr)
+	err := storage.RemoveAggregation(testAggr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists, _ := storage.AggregationExists(testAggr)
+	if exists {
+		t.Error("Expected aggregation to have been deleted", err)
+	}
+}
+
+func TestRemoveAggregationWithJobs(t *testing.T) {
+	Redis.FlushDB()
+
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8)
+	storage.SaveAggregation(testAggr)
+	storage.QueuePendingDownload(&testJob, 0)
+
+	err := storage.RemoveAggregation(testAggr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists, _ := storage.AggregationExists(testAggr)
+	if !exists {
+		t.Error("Expected aggregation to exist", err)
+	}
+}
+
+func TestGetAggregation(t *testing.T) {
+	Redis.FlushDb()
+
+	existingAggr, _ := job.NewAggregation("existingID", 8)
+	storage.SaveAggregation(existingAggr)
+	testCases := []string{
+		existingAggr.ID,
+		"nonExistingID",
+	}
+
+	for _, id := range testCases {
+		t.Run(fmt.Sprintf("%s", id), func(t *testing.T) {
+			_, err := storage.GetAggregation(id)
+			if err != ErrNotFound && err != nil {
+				t.Errorf("Expected to fetch the aggregation", err)
+			}
+		})
 	}
 }
