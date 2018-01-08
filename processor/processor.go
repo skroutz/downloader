@@ -564,142 +564,138 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 	}
 }
 
-// perform downloads the resource denoted by j.URL and updates its state in
-// Redis accordingly. It may retry downloading on certain errors.
-func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimetype.Validator) {
-	err := wp.markJobInProgress(j)
-	if err != nil {
-		wp.log.Printf("perform: Error marking %s as in-progress: %s", j, err)
-		return
-	}
+type DownloadError struct {
+	err       error
+	phase     string
+	retriable bool
+	internal  bool
+}
 
+func (e DownloadError) Error() string {
+	return fmt.Sprintf("Error while %s, %s, retriable: %t, internal: %t", e.phase, e.err, e.retriable, e.internal)
+}
+
+func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimetype.Validator) error {
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
-		wp.log.Printf("perform: Error initializing download request for %s: %s", j, err)
-		wp.p.stats.Add(statsFailures, 1)
-		err = wp.markJobFailed(j, fmt.Sprintf("Could not initialize request: %s", err))
-		if err != nil {
-			wp.log.Printf("perform: Error marking %s as failed: %s", j, err)
-		}
-		return
+		// This actually indicates a malformed url
+		return DownloadError{err, "creating request", false, false}
 	}
 	if wp.p.UserAgent != "" {
 		req.Header.Set("User-Agent", wp.p.UserAgent)
 	}
 
-	j.DownloadCount++
-	wp.log.Println("Performing request for", j, "...")
 	resp, err := wp.p.Client.Do(req.WithContext(ctx))
 	if err != nil {
-		wp.p.Log.Printf("perform: Error downloading job %s: %s", j, err)
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
-			err = wp.markJobFailed(j, fmt.Sprintf("TLS Error occured: %s", err))
 			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "tls"), 1)
-			if err != nil {
-				wp.log.Printf("perform: Error marking %s failed: %s", j, err)
-			}
-			return
+			return DownloadError{fmt.Errorf("TLS Error occured: %s", err), "performing request", false, false}
 		}
-
-		if err == context.Canceled {
-			// Do not count canceled download towards MaxRetries
-			j.DownloadCount--
-		}
-		wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "other"), 1)
-		err = wp.requeueOrFail(j, err.Error())
-		if err != nil {
-			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
-		}
-		return
-	}
-
-	j.ResponseCode = resp.StatusCode
-	wp.p.Log.Printf("Received status code %d for job: %s", resp.StatusCode, j)
-	wp.p.stats.Add(fmt.Sprintf("%s%d", statsResponseCodePrefix, resp.StatusCode), 1)
-
-	if resp.StatusCode >= http.StatusInternalServerError {
-		err = wp.requeueOrFail(j, fmt.Sprintf("Received status code %s", resp.Status))
-		if err != nil {
-			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
-		}
-		return
-	} else if resp.StatusCode >= http.StatusBadRequest {
-		err = wp.markJobFailed(j, fmt.Sprintf("Received status code %d", resp.StatusCode))
-		if err != nil {
-			wp.log.Printf("perform: Error marking %s failed: %s", j, err)
-		}
-		return
+		return DownloadError{err, "performing request", true, false}
 	}
 	defer resp.Body.Close()
 
+	j.ResponseCode = resp.StatusCode
+	wp.p.stats.Add(fmt.Sprintf("%s%d", statsResponseCodePrefix, resp.StatusCode), 1)
+
+	if resp.StatusCode >= http.StatusInternalServerError {
+		return DownloadError{fmt.Errorf("Received status code %s", resp.Status), "processing response", true, false}
+	} else if resp.StatusCode >= http.StatusBadRequest {
+		return DownloadError{fmt.Errorf("Received status code %s", resp.Status), "processing response", false, false}
+	}
+
 	out, err := wp.p.storageFile(j)
 	if err != nil {
-		wp.log.Printf("perform: Error creating download file for %s: %s", j, err)
-		wp.p.stats.Add(statsFailures, 1)
-		err = wp.requeueOrFail(j, fmt.Sprintf("Could not create/write to file, %v", err))
-		if err != nil {
-			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
-		}
-		return
+		return DownloadError{err, "creating output file", true, true}
 	}
 	defer out.Close()
 
 	if j.MimeType != "" {
 		if validator == nil {
-			wp.p.Log.Printf("Error: No available mime type validator, %s", j)
-			// This is problably an error on our side so do not bump the download count
-			j.DownloadCount--
-			wp.requeueOrFail(j, "MimeType validator: nil")
-			return
+			return DownloadError{errors.New("Error: No available mime type validator"), "validating mime type", true, true}
 		}
-		validator.Reset(j.MimeType)
 
-		// Use TeeReader to copy reads to the output file
-		err = validator.Read(io.TeeReader(resp.Body, out))
-		if err != nil {
+		validator.Reset(j.MimeType)
+		if err = validator.Read(io.TeeReader(resp.Body, out)); err != nil {
 			if _, ok := err.(mimetype.ErrMimeTypeMismatch); ok {
 				wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "mime"), 1)
-				wp.p.Log.Printf("perform: Error validationg mime type for %s: %s", j, err)
-				err = wp.markJobFailed(j, err.Error())
-			} else {
-				wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
-				err = wp.requeueOrFail(j, err.Error())
+				return DownloadError{err, "validating mime type", false, false}
 			}
-
-			if err != nil {
-				wp.log.Printf("perform: storage error during for %s: %s", j, err)
-			}
-			return
-		}
-	}
-
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-
-		if err == context.Canceled {
-			// Do not count canceled download towards MaxRetries
-			j.DownloadCount--
-		} else {
 			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
+			return DownloadError{err, "downloading file", true, false}
 		}
-
-		wp.log.Printf("perform: Error downloading file for %s: %s", j, err)
-		err = wp.requeueOrFail(j, fmt.Sprintf("Error downloading file for %s: %s", j, err))
-		if err != nil {
-			wp.log.Printf("perform: Error requeueing %s: %s", j, err)
-		}
-		return
 	}
 
-	err = out.Sync()
-	if err != nil {
-		wp.log.Printf("perform: Error syncing download file for %s: %s", j, err)
+	if _, err = io.Copy(out, resp.Body); err != nil {
+		wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
+		return DownloadError{err, "downloading file", true, false}
+	}
+
+	if err = out.Sync(); err != nil {
 		wp.p.stats.Add(statsFailures, 1)
+		return DownloadError{err, "syncing to disk", true, true}
+	}
+
+	return nil
+}
+
+// perform downloads the resource denoted by j.URL and updates its state in
+// Redis accordingly. It may retry downloading on certain errors.
+func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimetype.Validator) {
+	if err := wp.markJobInProgress(j); err != nil {
+		wp.log.Printf("perform: Error marking %s as in-progress: %s", j, err)
+		return
+	}
+	j.DownloadCount++
+
+	if err := wp.download(ctx, j, validator); err != nil {
+		de, ok := err.(DownloadError)
+		if !ok {
+			panic("Unknown error type received from download")
+		}
+
+		// Do not mark this as a download try if the error is on our side,
+		// or the request context was cancelled
+		if de.err == context.Canceled || de.internal {
+			j.DownloadCount--
+		}
+
+		if de.retriable {
+			if err = wp.requeueOrFail(j, de.err.Error()); err != nil {
+				wp.log.Printf("perform: Error requeing %s : %s", j, err)
+			}
+		} else {
+			if err = wp.markJobFailed(j, de.err.Error()); err != nil {
+				wp.log.Printf("perform: Error marking %s Failed: %s", j, err)
+			}
+		}
+
+		err := os.Remove(tmp.Name())
+		if err != nil {
+			wp.log.Printf("perform: Error deleting temp file %s, %s, %s", tmp.Name(), j, err)
+		}
 		return
 	}
 
-	err = wp.markJobSuccess(j)
+	path, err := wp.p.storageFile(j)
 	if err != nil {
+		wp.log.Printf("perform: Error retrieving storage file for job %s: %s", j, err)
+		if err = wp.markJobFailed(j, err.Error()); err != nil {
+			wp.log.Printf("perform: Error marking %s Failed: %s", j, err)
+		}
+		return
+	}
+
+	err = os.Rename(tmp.Name(), path)
+	if err != nil {
+		wp.log.Printf("perform: Error moving file %s, for job %s, %s", tmp.Name(), j, err)
+		if err = wp.markJobFailed(j, err.Error()); err != nil {
+			wp.log.Printf("perform: Error marking %s Failed: %s", j, err)
+		}
+		return
+	}
+
+	if err = wp.markJobSuccess(j); err != nil {
 		wp.log.Printf("perform: Error marking %s successful: %s", j, err)
 	}
 }

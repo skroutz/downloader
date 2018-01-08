@@ -289,8 +289,8 @@ func TestResourceDontExist(t *testing.T) {
 		if ci.Success {
 			t.Fatal("Expected Success to be false")
 		}
-		if !strings.HasSuffix(ci.Error, "404") {
-			t.Fatalf("Expected Error to end with '404': %s", ci.Error)
+		if !strings.Contains(ci.Error, "404 Not Found") {
+			t.Fatalf("Expected Error to contain '404 Not Found': %s", ci.Error)
 		}
 		if ci.DownloadURL != "" {
 			t.Fatalf("Expected DownloadURL to be empty: %#v", ci)
