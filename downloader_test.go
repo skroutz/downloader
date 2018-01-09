@@ -29,6 +29,11 @@ import (
 
 type testJob map[string]interface{}
 
+type fsResponse struct {
+	Code    int
+	Headers map[string]string
+}
+
 var (
 	mu         sync.Mutex
 	testBinary = os.Args[0:1]
@@ -50,7 +55,7 @@ var (
 	fsPort = "9718"
 	fsPath = "/testdata/"
 	// used to instrument fileServer
-	fsChan     = make(chan int, 10)
+	fsChan     = make(chan fsResponse, 10)
 	fileServer = newFileServer(fmt.Sprintf("%s:%s", fsHost, fsPort), fsChan)
 
 	csHost = "localhost"
@@ -356,8 +361,8 @@ func TestTransientDownstreamError(t *testing.T) {
 		"url":          resourceURL,
 		"callback_url": fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath)}
 
-	fsChan <- http.StatusInternalServerError // 1st try
-	fsChan <- http.StatusServiceUnavailable  // 2nd try
+	fsChan <- fsResponse{http.StatusInternalServerError, nil} // 1st try
+	fsChan <- fsResponse{http.StatusServiceUnavailable, nil}  // 2nd try
 	// 3rd try will succeed
 
 	err := postJob(job)
@@ -653,21 +658,18 @@ func postJob(job testJob) error {
 	return nil
 }
 
-func newFileServer(addr string, ch chan int) *http.Server {
+func newFileServer(addr string, ch chan fsResponse) *http.Server {
 	mux := http.NewServeMux()
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		nextRespCode := -1
-
 		select {
-		case nextRespCode = <-ch:
+		case nextResponse := <-ch:
+			for k, v := range nextResponse.Headers {
+				w.Header().Set(k, v)
+			}
+			w.WriteHeader(nextResponse.Code)
 		default:
-		}
-
-		if nextRespCode == -1 {
 			http.FileServer(http.Dir("testdata/")).ServeHTTP(w, r)
-		} else {
-			w.WriteHeader(nextRespCode)
 		}
 	})
 
