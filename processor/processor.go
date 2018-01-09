@@ -611,7 +611,7 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 
 	if j.MimeType != "" {
 		if validator == nil {
-			return DownloadError{errors.New("Error: No available mime type validator"), "validating mime type", true, true}
+			panic("No available mime type validator")
 		}
 
 		validator.Reset(j.MimeType)
