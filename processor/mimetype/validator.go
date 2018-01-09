@@ -103,9 +103,18 @@ func (v *Validator) Read(r io.Reader) error {
 
 // CheckBuffer performs mime types checks against the provided byte slice.
 func (v *Validator) CheckBuffer(p []byte) error {
-	mime, err := v.decoder.TypeByBuffer(p)
-	if err != nil {
-		return err
+	var mime string
+	var err error
+	// decoder.TypeByBuffer() panics with empty slices. We guard against
+	// that and manually return "application/x-empty" which is what libmagic
+	// returns on empty buffers until this is handled upstream.
+	if len(p) > 0 {
+		mime, err = v.decoder.TypeByBuffer(p)
+		if err != nil {
+			return err
+		}
+	} else {
+		mime = "application/x-empty"
 	}
 
 	for _, check := range v.checks {

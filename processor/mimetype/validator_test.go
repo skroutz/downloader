@@ -1,6 +1,7 @@
 package mimetype
 
 import (
+	"io"
 	"log"
 	"os"
 	"testing"
@@ -75,6 +76,28 @@ func TestImageSmallerThanThreshold(t *testing.T) {
 	if err = validator.Read(in); err == nil {
 		t.Fatal(err)
 	}
+}
+
+type unexpectedReader struct{}
+
+func (p unexpectedReader) Read(buf []byte) (int, error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
+func TestUnexpectedEOF(t *testing.T) {
+	validator.Reset("image/png")
+
+	var in unexpectedReader
+	err := validator.Read(in)
+	if err == nil {
+		t.Fatal("error expected")
+	}
+
+	// TODO We shouldn't be happy with a mimetype mismatch error since
+	// we hit a read error first.
+	// if _, ok := err.(ErrMimeTypeMismatch); ok {
+	// 	t.Fatal("We didn't expect a mimetype missmatch error")
+	// }
 }
 
 func TestPatternValidation(t *testing.T) {
