@@ -655,12 +655,10 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 		return
 	}
 	j.DownloadCount++
+	wp.log.Println("perform: Starting download for", j, "...")
 
-	if err = wp.download(ctx, j, validator); err != nil {
-		de, ok := err.(DownloadError)
-		if !ok {
-			panic("Unknown error type received from download")
-		}
+	if de := wp.download(ctx, j, validator); de != nil {
+		wp.log.Println("perform: Download Failed for", j, err)
 
 		// Do not mark this as a download try if the error is on our side,
 		// or the request context was cancelled
@@ -687,6 +685,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 		}
 		return
 	}
+	wp.log.Println("perform: Successfully completed download for", j)
 
 	if err = wp.markJobSuccess(j); err != nil {
 		wp.log.Printf("perform: Error marking %s successful: %s", j, err)
