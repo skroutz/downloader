@@ -51,6 +51,7 @@ import (
 
 	"golang.skroutz.gr/skroutz/downloader/job"
 	"golang.skroutz.gr/skroutz/downloader/processor/diskcheck"
+	derrors "golang.skroutz.gr/skroutz/downloader/processor/errors"
 	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
 	"golang.skroutz.gr/skroutz/downloader/stats"
 	"golang.skroutz.gr/skroutz/downloader/storage"
@@ -563,22 +564,11 @@ func (wp *workerPool) work(ctx context.Context, saveDir string) {
 	}
 }
 
-type DownloadError struct {
-	err       error
-	phase     string
-	retriable bool
-	internal  bool
-}
-
-func (e DownloadError) Error() string {
-	return fmt.Sprintf("Error while %s, %s, retriable: %t, internal: %t", e.phase, e.err, e.retriable, e.internal)
-}
-
-func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimetype.Validator) error {
+func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimetype.Validator) derrors.DownloadError {
 	req, err := http.NewRequest("GET", j.URL, nil)
 	if err != nil {
 		// This actually indicates a malformed url
-		return DownloadError{err, "creating request", false, false}
+		return derrors.E("creating request", err)
 	}
 	if wp.p.UserAgent != "" {
 		req.Header.Set("User-Agent", wp.p.UserAgent)
@@ -588,9 +578,9 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
 			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "tls"), 1)
-			return DownloadError{fmt.Errorf("TLS Error occured: %s", err), "performing request", false, false}
+			return derrors.Errorf("performing request", "TLS Error occured: %s", err)
 		}
-		return DownloadError{err, "performing request", true, false}
+		return derrors.E("performing request", err).Retriable()
 	}
 	defer resp.Body.Close()
 
@@ -598,14 +588,14 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 	wp.p.stats.Add(fmt.Sprintf("%s%d", statsResponseCodePrefix, resp.StatusCode), 1)
 
 	if resp.StatusCode >= http.StatusInternalServerError {
-		return DownloadError{fmt.Errorf("Received status code %s", resp.Status), "processing response", true, false}
+		return derrors.Errorf("processing response", "Received status code %s", resp.Status).Retriable()
 	} else if resp.StatusCode >= http.StatusBadRequest {
-		return DownloadError{fmt.Errorf("Received status code %s", resp.Status), "processing response", false, false}
+		return derrors.Errorf("processing response", "Received status code %s", resp.Status)
 	}
 
 	out, err := os.Create(wp.p.tmpStoragePath(j))
 	if err != nil {
-		return DownloadError{err, "creating tmp file", true, true}
+		return derrors.E("creating tmp file", err).Internal().Retriable()
 	}
 	defer out.Close()
 
@@ -618,29 +608,29 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		if err = validator.Read(io.TeeReader(resp.Body, out)); err != nil {
 			if _, ok := err.(mimetype.ErrMimeTypeMismatch); ok {
 				wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "mime"), 1)
-				return DownloadError{err, "validating mime type", false, false}
+				return derrors.E("validating mime type", err)
 			}
 			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
-			return DownloadError{err, "downloading file", true, false}
+			return derrors.E("downloading file", err).Retriable()
 		}
 	}
 
 	if _, err = io.Copy(out, resp.Body); err != nil {
 		wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
-		return DownloadError{err, "downloading file", true, false}
+		return derrors.E("downloading file", err).Retriable()
 	}
 
 	if err = out.Sync(); err != nil {
-		return DownloadError{err, "syncing to disk", true, true}
+		return derrors.E("syncing to disk", err).Internal().Retriable()
 	}
 
 	path := wp.p.storagePath(j)
 	if err = os.MkdirAll(filepath.Dir(path), os.FileMode(0755)); err != nil {
-		return DownloadError{err, "creating download directory", true, true}
+		return derrors.E("creating download directory", err).Internal().Retriable()
 	}
 
 	if err = os.Rename(out.Name(), path); err != nil {
-		return DownloadError{err, "moving file to perm location", true, true}
+		return derrors.E("moving file to perm location", err).Internal().Retriable()
 	}
 
 	return nil
@@ -662,20 +652,20 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 
 		// Do not mark this as a download try if the error is on our side,
 		// or the request context was cancelled
-		if de.err == context.Canceled || de.internal {
+		if de.Err() == context.Canceled || de.IsInternal() {
 			j.DownloadCount--
 		}
 
-		if de.internal {
+		if de.IsInternal() {
 			wp.p.stats.Add(statsFailures, 1)
 		}
 
-		if de.retriable {
-			if err = wp.requeueOrFail(j, de.err.Error()); err != nil {
+		if de.IsRetriable() {
+			if err = wp.requeueOrFail(j, de.Error()); err != nil {
 				wp.log.Printf("perform: Error requeing %s : %s", j, err)
 			}
 		} else {
-			if err = wp.markJobFailed(j, de.err.Error()); err != nil {
+			if err = wp.markJobFailed(j, de.Error()); err != nil {
 				wp.log.Printf("perform: Error marking %s Failed: %s", j, err)
 			}
 		}
