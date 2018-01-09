@@ -1,6 +1,7 @@
 package mimetype
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -14,7 +15,7 @@ const MimeTypeValidationThreshold = 1024
 // Validator checks its buffer's mime type against the provided checks.
 // It holds a reference to a mime type decoder.
 type Validator struct {
-	buffer  []byte
+	buffer  *bytes.Buffer
 	decoder *magicmime.Decoder
 
 	// holds all checks to be done against the bytes written to the buffer
@@ -50,7 +51,11 @@ func New() (*Validator, error) {
 		return nil, err
 	}
 
-	return &Validator{decoder: decoder, buffer: make([]byte, MimeTypeValidationThreshold)}, nil
+	// Buffer's internal []byte slice will be grown to 2*size + MinRead during buff.ReadFrom()
+	// anyway so we allocate it in a single step right from the start.
+	// See https://golang.org/pkg/bytes/#Buffer.ReadFrom source.
+	buf := bytes.NewBuffer(make([]byte, 0, 2*MimeTypeValidationThreshold+bytes.MinRead))
+	return &Validator{decoder: decoder, buffer: buf}, nil
 }
 
 func (v *Validator) extractListsFromString(checks string) {
@@ -87,18 +92,19 @@ func ValidateMimeTypePattern(pattern string) error {
 // Reset resets the current validatorby reinitializing all checks based on the given pattern.
 func (v *Validator) Reset(expectedMimePattern string) {
 	v.extractListsFromString(expectedMimePattern)
+	v.buffer.Reset()
 }
 
-// Read takes an io.Reader as an argument, tries to read at least MimeTypeValidationThreshold
-// of input bytes (using io.ReadAtLeast) and then performs mime type checks against its  buffer.
-// The io.ErrUnexpectedEOF is ignored.
+// Read takes an io.Reader as an argument, tries to read MimeTypeValidationThreshold of input
+// bytes, or fewer if the request is shorter. It then performs mime type checks against its buffer.
+// Any r.Read() errors are returned verbatim.
 func (v *Validator) Read(r io.Reader) error {
-	n, err := io.ReadAtLeast(r, v.buffer, MimeTypeValidationThreshold)
-	if err != nil && err != io.ErrUnexpectedEOF {
+	_, err := v.buffer.ReadFrom(io.LimitReader(r, MimeTypeValidationThreshold))
+	if err != nil {
 		return err
 	}
 
-	return v.CheckBuffer(v.buffer[:n])
+	return v.CheckBuffer(v.buffer.Bytes())
 }
 
 // CheckBuffer performs mime types checks against the provided byte slice.

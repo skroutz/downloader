@@ -93,11 +93,11 @@ func TestUnexpectedEOF(t *testing.T) {
 		t.Fatal("error expected")
 	}
 
-	// TODO We shouldn't be happy with a mimetype mismatch error since
+	// We shouldn't be happy with a mimetype mismatch error since
 	// we hit a read error first.
-	// if _, ok := err.(ErrMimeTypeMismatch); ok {
-	// 	t.Fatal("We didn't expect a mimetype missmatch error")
-	// }
+	if _, ok := err.(ErrMimeTypeMismatch); ok {
+		t.Fatal("Unexpected mimetype missmatch error")
+	}
 }
 
 func TestPatternValidation(t *testing.T) {

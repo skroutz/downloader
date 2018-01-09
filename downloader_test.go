@@ -403,6 +403,45 @@ func TestTransientDownstreamError(t *testing.T) {
 		}
 	}
 }
+func TestUnexpectedReadError(t *testing.T) {
+	var ci notifier.CallbackInfo
+
+	resourceURL := downloadURL("200")
+
+	job := testJob{
+		"aggr_id":      "murphy",
+		"aggr_limit":   1,
+		"url":          resourceURL,
+		"callback_url": callbackURL(),
+		"mime_type":    "type/missmatch",
+	}
+	headers := make(map[string]string)
+	headers["Content-Length"] = "42"             // larger that the actual reply
+	fsChan <- fsResponse{http.StatusOK, headers} // 1st  try
+	fsChan <- fsResponse{http.StatusOK, headers} // 2nd  try
+	fsChan <- fsResponse{http.StatusOK, headers} // last try
+
+	err := postJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-time.After(timeout + (5 * time.Second)):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-callbacks:
+		err := json.Unmarshal(cb, &ci)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if ci.Success {
+			t.Fatal("Expected download to be unsuccesful")
+		}
+		if !strings.Contains(ci.Error, "unexpected EOF") {
+			t.Fatalf("Expected to get an 'unexcepted EOF' error, got %q", ci.Error)
+		}
+	}
+}
 
 // TODO: this should be extracted to package-specific integration tests
 // this is not the place to test such functionality
