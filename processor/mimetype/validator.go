@@ -10,7 +10,8 @@ import (
 	"github.com/rakyll/magicmime"
 )
 
-const MimeTypeValidationThreshold = 1024
+// BytesThreshold is the size of the validation buffer.
+const BytesThreshold = 1024
 
 // Validator checks its buffer's mime type against the provided checks.
 // It holds a reference to a mime type decoder.
@@ -54,7 +55,7 @@ func New() (*Validator, error) {
 	// Buffer's internal []byte slice will be grown to 2*size + MinRead during buff.ReadFrom()
 	// anyway so we allocate it in a single step right from the start.
 	// See https://golang.org/pkg/bytes/#Buffer.ReadFrom source.
-	buf := bytes.NewBuffer(make([]byte, 0, 2*MimeTypeValidationThreshold+bytes.MinRead))
+	buf := bytes.NewBuffer(make([]byte, 0, 2*BytesThreshold+bytes.MinRead))
 	return &Validator{decoder: decoder, buffer: buf}, nil
 }
 
@@ -99,7 +100,7 @@ func (v *Validator) Reset(expectedMimePattern string) {
 // bytes, or fewer if the request is shorter. It then performs mime type checks against its buffer.
 // Any r.Read() errors are returned verbatim.
 func (v *Validator) Read(r io.Reader) error {
-	_, err := v.buffer.ReadFrom(io.LimitReader(r, MimeTypeValidationThreshold))
+	_, err := v.buffer.ReadFrom(io.LimitReader(r, BytesThreshold))
 	if err != nil {
 		return err
 	}

@@ -102,12 +102,12 @@ func TestUnexpectedEOF(t *testing.T) {
 
 func TestPatternValidation(t *testing.T) {
 	tc := map[string]bool{
-		"image/*":            true,
-		"!application/xml":   true,
+		"[]a]":                               false,
+		"\\":                                 false,
+		"":                                   true,
+		"image/*":                            true,
+		"!application/xml":                   true,
 		"!image/vnd.adobe.photoshop,image/*": true,
-		"":                   true,
-		"[]a]":               false,
-		"\\":                 false,
 	}
 
 	for mime, expected := range tc {
