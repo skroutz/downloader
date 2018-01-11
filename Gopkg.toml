@@ -9,3 +9,7 @@
 [[constraint]]
   name = "github.com/rakyll/imagicmime"
   version = "=0.1.0"
+
+[[constraint]]
+  name = "github.com/rakyll/statik"
+  version = "0.1.1"
