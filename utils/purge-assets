@@ -2,11 +2,12 @@
 #
 # Usage:
 #
-#   cat access.log | ASSET_PATH="/tmp" purge-files --purge
+#   cat access.log | ASSETS_PATH="/tmp" purge-files --purge
 #
-ASSETS_PATH = ENV["ASSET_PATH"] || "/var/cache/downloader/assets"
+ASSETS_PATH = ENV["ASSETS_PATH"]
 dry_run = !(ARGV[0] == "--purge")
 
+raise "Need an ASSETS_PATH" if ASSETS_PATH.nil? || ASSETS_PATH.empty?
 raise "Nothing passed to STDIN" if STDIN.tty?
 
 regex = /GET \/assets(\/\S+\/\S+) .+ 200/
@@ -23,7 +24,6 @@ STDIN.each do |line|
   if dry_run
     puts fullpath if File.exist?(fullpath)
   else
-    puts "Deleting file [#{fullpath}]"
     File.delete(fullpath) rescue nil
   end
 end
