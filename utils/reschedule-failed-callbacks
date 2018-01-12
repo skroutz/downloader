@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 #
-# Detects failed callbacks and re-schedules them so that they will be re-picked
-# when the Notifier restarts and picks-up rogue callbacks.
+# Detects failed callbacks and re-schedules them.
 #
 # Usage:
 #
@@ -12,34 +11,40 @@
 #     reschedule-failed-callbacks --reschedule
 #
 require "redis"
-redis = Redis.new(host: ENV["REDIS"] || "localhost")
+require "net/http"
+require "uri"
 
+redis = Redis.new(host: ENV["REDIS"] || "localhost")
+downloader = URI(ARGV[1] || "http://localhost")
 dry_run = !(ARGV[0] == "--reschedule")
 
 cursor = 0
+failed_count = 0
 
-loop do
-  cursor, jobs = redis.scan(cursor, match: "job:*")
+Net::HTTP.start(downloader.host, downloader.port) do |http|
+  loop do
+    cursor, jobs = redis.scan(cursor, match: "job:*")
 
-  jobs.each do |job_key|
-    job = redis.hgetall(job_key)
+    jobs.each do |job_key|
+      job = redis.hgetall(job_key)
 
-    next if job["CallbackState"] != "Failed"
+      next if job["CallbackState"] != "Failed"
 
-    if dry_run
-      puts "Would reschedule callback for #{job_key}"
-    else
-      redis.hset(job_key, "CallbackState", "InProgress")
-      redis.hset(job_key, "CallbackCount", "0")
-      redis.hset(job_key, "CallbackMeta", "")
-      puts "Re-scheduled callback for #{job_key}"
+      if dry_run
+        puts "Would reschedule callback for #{job_key}"
+      else
+        req = Net::HTTP::Post.new URI(downloader + "/retry/#{job['ID']}")
+        res = http.request(req)
+        if res.code == "204"
+          puts "Re-scheduled callback for #{job_key}"
+        else
+          failed_count += 1
+          puts "#{res.code}: #{res.body}"
+        end
+      end
     end
+
+    break if cursor == "0"
   end
-
-  break if cursor == "0"
 end
-
-if !dry_run
-  puts "Finished. Be sure to restart notifier so that rescheduled callbacks " \
-    "are picked up."
-end
+exit(failed_count)
