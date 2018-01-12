@@ -32,6 +32,7 @@ def build():
 def copy():
     put('downloader', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
     put('utils/dlstats-graphite', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
+    put('utils/purge-assets', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
 
 def restart():
     sudo('systemctl restart downloader@api.service')
