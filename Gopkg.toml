@@ -7,7 +7,7 @@
   version = "6.8.0"
 
 [[constraint]]
-  name = "github.com/rakyll/imagicmime"
+  name = "github.com/rakyll/magicmime"
   version = "=0.1.0"
 
 [[constraint]]
