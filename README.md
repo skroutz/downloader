@@ -52,7 +52,7 @@ Unsuccessful Callback Examples:
 
 {
    "success":false,
-   "error":"TLS Error Occured: dial: x509: certificate signed by unknown authority ",
+   "error":"TLS Error Occured: dial: x509: certificate signed by unknown authority",
    "extra":"foobar",
    "resource_url":"https://httpbin.org/image/png",
    "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
