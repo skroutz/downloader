@@ -34,14 +34,17 @@ func init() {
 
 func TestHandler(t *testing.T) {
 	cases := map[string]int{
-		`{"aggr_id":"foo","aggr_limit":8,"url":"https://httpbin.org/image/png","callback_url":"http://localhost:8080", "extra":"foobar"}`: http.StatusCreated,
-
+		`{"aggr_id":"foo","aggr_limit":8,"url":"https://httpbin.org/image/png","callback_url":"http://localhost:8080", "extra":"foobar"}`:                http.StatusCreated,
+		`{"aggr_id":"foo","aggr_limit":8,"url":"https://httpbin.org/image/png","callback_url":"http://localhost:8080", "extra":"{\"info\":\"foobar\"}"}`: http.StatusCreated,
+		`{"aggr_id":"foo","aggr_limit":8,"url":"https://httpbin.org/image/png","callback_url":"http://localhost:8080"}`:                                  http.StatusCreated,
 		`meh`:           http.StatusBadRequest,
 		`{"goo":"bar"}`: http.StatusBadRequest,
 		// invalid aggregation (no limit)
 		`{"aggr_id":"foo","url":"https://httpbin.org/image/png","callback_url":"http://localhost:8080", "extra":"foobar"}`: http.StatusBadRequest,
 		// invalid job (no callback url)
 		`{"aggr_id":"foo","aggr_limit":8,"url":"https://httpbin.org/image/png","extra":"foobar"}`: http.StatusBadRequest,
+		// invalid extra (JSON is invalid)
+		`{"aggr_id":"foo","aggr_limit":8,"url":"https://httpbin.org/image/png","callback_url":"http://localhost:8080", "extra":"{"info":"foobar"}"}`: http.StatusBadRequest,
 	}
 
 	as := New(store, "example.com", 80, "", logger)
