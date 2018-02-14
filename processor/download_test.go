@@ -153,7 +153,7 @@ func TestMimeTypeError(t *testing.T) {
 
 	v, err := mimetype.New()
 	if err != nil {
-		t.Fatal("Could not create a new validator")
+		t.Fatal("Could not create a new validator", err)
 	}
 	e := defaultWP.download(context.TODO(), &j, v)
 	if e.IsRetriable() || e.IsInternal() {
@@ -182,5 +182,68 @@ func TestContextCanceling(t *testing.T) {
 
 	if !e.IsRetriable() || e.IsInternal() {
 		t.Fatal("Context cancelled errors should be retriable", e)
+	}
+}
+
+func TestPerformDownloadSuccess(t *testing.T) {
+	var err error
+	j := getTestJob(t)
+	store.QueuePendingDownload(&j, 0)
+	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "../testdata/tiny.png")
+	})
+	defaultWP.perform(context.TODO(), &j, nil)
+
+	j, err = store.GetJob(j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if j.DownloadState != job.StateSuccess {
+		t.Fatalf("Download should have been marked successful for job %s", j)
+	}
+}
+
+func TestPerformDownloadFail(t *testing.T) {
+	var err error
+	j := getTestJob(t)
+	store.QueuePendingDownload(&j, 0)
+	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "NotFound", http.StatusNotFound)
+	})
+	defaultWP.perform(context.TODO(), &j, nil)
+
+	j, err = store.GetJob(j.ID)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if j.DownloadState != job.StateFailed {
+		t.Fatalf("Download should have been marked as Failed for job %s", j)
+	}
+}
+
+func TestPerformDownloadRequeue(t *testing.T) {
+	var err error
+	j := getTestJob(t)
+	store.QueuePendingDownload(&j, 0)
+	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	})
+	defaultWP.perform(context.TODO(), &j, nil)
+
+	j, err = store.GetJob(j.ID)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if j.DownloadState != job.StatePending {
+		t.Fatalf("Download should have been Requeued for job %s", j)
+	}
+
+	if j.DownloadCount != 1 {
+		t.Fatal("Download count should have been bumped, found DownloadCount: %d", j.DownloadCount)
 	}
 }
