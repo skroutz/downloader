@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,14 +21,19 @@ import (
 )
 
 var (
-	storageDir  string
-	Redis       *redis.Client
-	store       *storage.Storage
-	testChecker *dummyDiskChecker
-	logger      = log.New(os.Stderr, "[test processor]", log.Ldate|log.Ltime|log.Lshortfile)
+	storageDir       string
+	Redis            *redis.Client
+	store            *storage.Storage
+	testChecker      *dummyDiskChecker
+	logger           = log.New(os.Stderr, "[test processor]", log.Ldate|log.Ltime|log.Lshortfile)
+	mux              = http.NewServeMux()
+	server           = httptest.NewServer(mux)
+	defaultAggr      = job.Aggregation{ID: "FooBar", Limit: 1}
+	defaultProcessor Processor
+	defaultWP        workerPool
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	var err error
 
 	storageDir, err = ioutil.TempDir("", "downloader-processor-")
@@ -54,8 +59,36 @@ func init() {
 	}
 	newChecker = func(string, int, int, time.Duration) (diskcheck.Checker, error) { return testChecker, nil }
 
-	//defer os.RemoveAll(dir)
+	defaultProcessor, err = New(store, 3, storageDir, logger)
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	defaultWP = defaultProcessor.newWorkerPool(defaultAggr)
+
+	exit := m.Run()
+
+	server.Close()
+	os.Exit(exit)
+}
+
+// Utility function that creates a job getting its ID and download URL using
+// the name of the current test
+func getTestJob(t *testing.T) job.Job {
+	return job.Job{
+		ID:          t.Name(),
+		URL:         strings.Join([]string{server.URL, t.Name()}, "/"),
+		AggrID:      defaultAggr.ID,
+		CallbackURL: "http://example.com",
+	}
+}
+
+// Utility function to dynamically create handlers with the specified name.
+func addHandler(endpoint string, handler func(w http.ResponseWriter, r *http.Request)) {
+	if !strings.HasPrefix(endpoint, "/") {
+		endpoint = "/" + endpoint
+	}
+	mux.HandleFunc(endpoint, handler)
 }
 
 type dummyDiskChecker struct {
@@ -93,11 +126,6 @@ func TestReaper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := New(store, 3, storageDir, logger)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	err = os.Mkdir(path.Join(storageDir, "RIP"), os.ModePerm)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +136,7 @@ func TestReaper(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
-		processor.reaper(ctx)
+		defaultProcessor.reaper(ctx)
 		wg.Done()
 	}()
 
@@ -171,11 +199,6 @@ func TestRogueCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := New(store, 3, storageDir, logger)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	testcases := []struct {
 		Job           job.Job
 		expectedState job.State
@@ -205,7 +228,7 @@ func TestRogueCollection(t *testing.T) {
 		}
 	}
 
-	processor.collectRogueDownloads()
+	defaultProcessor.collectRogueDownloads()
 
 	for _, testcase := range testcases {
 		j, err := store.GetJob(testcase.Job.ID)
@@ -225,12 +248,8 @@ func TestChecker(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processor, err := New(store, 3, storageDir, logger)
-	if err != nil {
-		t.Fatal(err)
-	}
 	closeChan := make(chan struct{})
-	go processor.Start(closeChan)
+	go defaultProcessor.Start(closeChan)
 
 	// At the beginning the disk health is "healthy" (our convention). By
 	// calling Sick() we change its health to "sick".
@@ -301,31 +320,26 @@ func TestChecker(t *testing.T) {
 }
 
 func TestJobWithNoAggregation(t *testing.T) {
-	Redis.FlushDB().Err()
-
-	processor, err := New(store, 1, storageDir, logger)
-	if err != nil {
+	if err := Redis.FlushDB().Err(); err != nil {
 		t.Fatal(err)
 	}
+
 	reqs := make(chan struct{}, 1)
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
 		reqs <- struct{}{}
 		w.WriteHeader(http.StatusOK)
-	}))
-	defer s.Close()
-	testJob := &job.Job{
-		ID:  "jdsk231",
-		URL: s.URL,
+	})
 
-		// This aggregation hasn't been stored in Redis
-		AggrID: "baz",
-	}
-	err = store.QueuePendingDownload(testJob, 0)
+	testJob := getTestJob(t)
+	//This aggregation hasn't been stored in Redis
+	testJob.AggrID = "Aggr" + t.Name()
+
+	err := store.QueuePendingDownload(&testJob, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	closeChan := make(chan struct{})
-	go processor.Start(closeChan)
+	go defaultProcessor.Start(closeChan)
 
 	select {
 	// The job has been processed and a download request has been sent.
@@ -337,20 +351,4 @@ func TestJobWithNoAggregation(t *testing.T) {
 
 	closeChan <- struct{}{}
 	<-closeChan
-}
-
-// blocks until a server listens on the given port
-func waitForServer(port string) {
-	backoff := 50 * time.Millisecond
-
-	for i := 0; i < 10; i++ {
-		conn, err := net.DialTimeout("tcp", ":"+port, 3*time.Second)
-		if err != nil {
-			time.Sleep(backoff)
-			continue
-		}
-		conn.Close()
-		return
-	}
-	log.Fatalf("Server on port %s not up after 10 retries", port)
 }

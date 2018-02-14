@@ -5,8 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -14,43 +12,6 @@ import (
 	"golang.skroutz.gr/skroutz/downloader/job"
 	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
 )
-
-var (
-	mux         = http.NewServeMux()
-	server      = httptest.NewServer(mux)
-	defaultAggr = job.Aggregation{ID: "FooBar", Limit: 1}
-	defaultWP   workerPool
-)
-
-func getTestJob(t *testing.T) job.Job {
-	return job.Job{
-		ID:          t.Name(),
-		URL:         strings.Join([]string{server.URL, t.Name()}, "/"),
-		AggrID:      defaultAggr.ID,
-		CallbackURL: "http://example.com",
-	}
-}
-
-func TestMain(m *testing.M) {
-	DefaultProcessor, err := New(store, 3, storageDir, logger)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defaultWP = DefaultProcessor.newWorkerPool(defaultAggr)
-
-	exit := m.Run()
-
-	server.Close()
-	os.Exit(exit)
-}
-
-func addHandler(endpoint string, handler func(w http.ResponseWriter, r *http.Request)) {
-	if !strings.HasPrefix(endpoint, "/") {
-		endpoint = "/" + endpoint
-	}
-	mux.HandleFunc(endpoint, handler)
-}
 
 func TestPerformUserAgent(t *testing.T) {
 	var wg sync.WaitGroup
