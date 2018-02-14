@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -69,9 +70,13 @@ func TestValidatorPanic(t *testing.T) {
 }
 
 func TestInsecureDownload(t *testing.T) {
+	//instantiate simple insecure TLS server
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	}))
+	defer ts.Close()
+
 	j := getTestJob(t)
-	//Use a known external url instead of messing with local certs
-	j.URL = "https://untrusted-root.badssl.com/"
+	j.URL = ts.URL
 
 	e := defaultWP.download(context.TODO(), &j, nil)
 	if e.IsRetriable() || e.IsInternal() {
