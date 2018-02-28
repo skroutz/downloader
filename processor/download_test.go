@@ -210,6 +210,6 @@ func TestPerformDownloadRequeue(t *testing.T) {
 	}
 
 	if j.DownloadCount != 1 {
-		t.Fatal("Download count should have been bumped, found DownloadCount: %d", j.DownloadCount)
+		t.Fatalf("Download count should have been bumped, found DownloadCount: %d", j.DownloadCount)
 	}
 }

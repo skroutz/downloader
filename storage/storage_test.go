@@ -160,7 +160,7 @@ func TestGetAggregation(t *testing.T) {
 		t.Run(fmt.Sprintf("%s", id), func(t *testing.T) {
 			_, err := storage.GetAggregation(id)
 			if err != ErrNotFound && err != nil {
-				t.Errorf("Expected to fetch the aggregation", err)
+				t.Error("Expected to fetch the aggregation", err)
 			}
 		})
 	}
