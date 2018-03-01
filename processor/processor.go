@@ -648,7 +648,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 	wp.log.Println("perform: Starting download for", j, "...")
 
 	if de := wp.download(ctx, j, validator); de != nil {
-		wp.log.Println("perform: Download Failed for", j, err)
+		wp.log.Println("perform: Download Failed for", j, de)
 
 		// Do not mark this as a download try if the error is on our side,
 		// or the request context was cancelled
