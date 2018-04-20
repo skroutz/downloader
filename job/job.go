@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"path"
 
-	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
+	"github.com/skroutz/downloader/processor/mimetype"
 )
 
 // The available states of a job's DownloadState/CallbackState.

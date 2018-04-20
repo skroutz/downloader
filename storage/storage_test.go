@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-redis/redis"
-	"golang.skroutz.gr/skroutz/downloader/job"
+	"github.com/skroutz/downloader/job"
 )
 
 var (

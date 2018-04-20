@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.skroutz.gr/skroutz/downloader/notifier"
+	"github.com/skroutz/downloader/notifier"
 )
 
 type testJob map[string]interface{}

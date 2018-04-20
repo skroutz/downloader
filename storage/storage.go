@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.skroutz.gr/skroutz/downloader/job"
+	"github.com/skroutz/downloader/job"
 
 	"github.com/go-redis/redis"
 )

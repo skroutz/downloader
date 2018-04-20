@@ -14,10 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	"golang.skroutz.gr/skroutz/downloader/api"
-	"golang.skroutz.gr/skroutz/downloader/notifier"
-	"golang.skroutz.gr/skroutz/downloader/processor"
-	"golang.skroutz.gr/skroutz/downloader/storage"
+	"github.com/skroutz/downloader/api"
+	"github.com/skroutz/downloader/notifier"
+	"github.com/skroutz/downloader/processor"
+	"github.com/skroutz/downloader/storage"
 
 	"github.com/go-redis/redis"
 	"github.com/urfave/cli"

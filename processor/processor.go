@@ -48,12 +48,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.skroutz.gr/skroutz/downloader/job"
-	"golang.skroutz.gr/skroutz/downloader/processor/diskcheck"
-	derrors "golang.skroutz.gr/skroutz/downloader/processor/errors"
-	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
-	"golang.skroutz.gr/skroutz/downloader/stats"
-	"golang.skroutz.gr/skroutz/downloader/storage"
+	"github.com/skroutz/downloader/job"
+	"github.com/skroutz/downloader/processor/diskcheck"
+	derrors "github.com/skroutz/downloader/processor/errors"
+	"github.com/skroutz/downloader/processor/mimetype"
+	"github.com/skroutz/downloader/stats"
+	"github.com/skroutz/downloader/storage"
 )
 
 var (

@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"golang.skroutz.gr/skroutz/downloader/job"
-	"golang.skroutz.gr/skroutz/downloader/storage"
+	"github.com/skroutz/downloader/job"
+	"github.com/skroutz/downloader/storage"
 
 	"github.com/go-redis/redis"
 )

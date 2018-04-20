@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"golang.skroutz.gr/skroutz/downloader/job"
-	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
+	"github.com/skroutz/downloader/job"
+	"github.com/skroutz/downloader/processor/mimetype"
 )
 
 func TestPerformUserAgent(t *testing.T) {

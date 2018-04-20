@@ -8,7 +8,7 @@ import (
 
 	"github.com/rakyll/statik/fs"
 	// Import the statik generated package
-	_ "golang.skroutz.gr/skroutz/downloader/api/statik"
+	_ "github.com/skroutz/downloader/api/statik"
 )
 
 func staticFs() (http.FileSystem, error) {

@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"time"
 
-	"golang.skroutz.gr/skroutz/downloader/job"
-	"golang.skroutz.gr/skroutz/downloader/storage"
+	"github.com/skroutz/downloader/job"
+	"github.com/skroutz/downloader/storage"
 )
 
 // API represents the api server.

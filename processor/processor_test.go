@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"golang.skroutz.gr/skroutz/downloader/job"
-	"golang.skroutz.gr/skroutz/downloader/processor/diskcheck"
-	"golang.skroutz.gr/skroutz/downloader/storage"
+	"github.com/skroutz/downloader/job"
+	"github.com/skroutz/downloader/processor/diskcheck"
+	"github.com/skroutz/downloader/storage"
 )
 
 var (
