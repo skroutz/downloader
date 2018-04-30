@@ -1,3 +1,4 @@
+// Package storage is an abstraction/utility layer over Redis.
 package storage
 
 import (
@@ -27,14 +28,13 @@ const (
 	// "<JobKeyPrefix><job-id>"
 	JobKeyPrefix = "job:"
 
-	// IDs of jobs that are completed and their callback is to be executed
-	// are in this Redis List.
-	//
+	// CallbackQueue contains IDs of jobs that are completed
+	// and their callback is to be executed
 	// TODO: this introduces coupling with the notifier. See how we can
 	// separate it
 	CallbackQueue = "CallbackQueue"
 
-	// This queue contains ids of jobs to be deleted
+	// RIPQueue contains ids of jobs to be deleted
 	RIPQueue = "JobDeletionQueue"
 
 	// Prefix for stats related entries
@@ -121,6 +121,7 @@ var (
 	ErrNotFound = errors.New("Not Found")
 )
 
+// Storage wraps a redis.Client instance.
 type Storage struct {
 	Redis *redis.Client
 }
@@ -275,7 +276,7 @@ func (s *Storage) GetAggregation(id string) (job.Aggregation, error) {
 	return job.Aggregation{ID: id, Limit: limit}, nil
 }
 
-// Save updates/creates the current aggregation in redis.
+// SaveAggregation updates/creates the current aggregation in redis.
 func (s *Storage) SaveAggregation(a *job.Aggregation) error {
 	return s.Redis.HSet(AggrKeyPrefix+a.ID, "Limit", a.Limit).Err()
 }

@@ -1,4 +1,4 @@
-// TODO: need tests
+// Package stats provides stats reporting and storing abstractions.
 package stats
 
 import (
@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// Stats is the statistics reporting entity of the downloader.
+// It acts as a deamon and reports stats using
+// the provided reportfunc on the specified interval.
 type Stats struct {
 	*expvar.Map
 	interval   time.Duration

@@ -14,6 +14,8 @@ type Aggregation struct {
 	Limit int `json:"aggr_limit"`
 }
 
+// NewAggregation creates an aggregation with the provided ID and limit.
+// If any of the prerequisites fail, an error is returned.
 func NewAggregation(id string, limit int) (*Aggregation, error) {
 	if id == "" {
 		return nil, errors.New("Aggregation ID cannot be empty")
@@ -24,6 +26,7 @@ func NewAggregation(id string, limit int) (*Aggregation, error) {
 	return &Aggregation{ID: id, Limit: limit}, nil
 }
 
+// UnmarshalJSON populates the aggregation with the values in the provided JSON.
 func (a *Aggregation) UnmarshalJSON(b []byte) error {
 	var tmp map[string]interface{}
 

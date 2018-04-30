@@ -1,6 +1,5 @@
-// Processor is one of the core entities of the downloader. It facilitates the
-// processing of Jobs.
-// Its main responsibility is to manage the creation and destruction of
+// Package processor is one of the core entities of the downloader. It facilitates the
+// processing of Jobs. Its main responsibility is to manage the creation and destruction of
 // workerPools, which actually perform the Job download process.
 //
 // Each WorkerPool processes jobs belonging to a single aggregation and is in
@@ -58,6 +57,7 @@ import (
 )
 
 var (
+	// RetryBackoffDuration indicates the time to wait between retries.
 	RetryBackoffDuration = 2 * time.Minute
 	newChecker           = diskcheck.New
 
@@ -108,6 +108,8 @@ const (
 	diskInterval = 1 * time.Minute
 )
 
+// Processor is the main entity of the downloader.
+// For more info of its architecture see package level doc.
 type Processor struct {
 	Storage *storage.Storage
 

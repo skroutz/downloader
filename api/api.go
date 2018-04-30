@@ -17,6 +17,7 @@ import (
 	"golang.skroutz.gr/skroutz/downloader/storage"
 )
 
+// API represents the api server.
 type API struct {
 	Server  *http.Server
 	Storage *storage.Storage
@@ -95,6 +96,7 @@ func (as *API) retry(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// New creates a new API server, listening on the given host & port.
 func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	logger *log.Logger) *API {
 	as := &API{Storage: s}

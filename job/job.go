@@ -10,8 +10,8 @@ import (
 	"golang.skroutz.gr/skroutz/downloader/processor/mimetype"
 )
 
+// The available states of a job's DownloadState/CallbackState.
 const (
-	// The available states of a job's DownloadState/CallbackState.
 	StatePending    = "Pending"
 	StateFailed     = "Failed"
 	StateSuccess    = "Success"
@@ -80,6 +80,8 @@ func (j *Job) Path() string {
 	return path.Join(string(j.ID[0:3]), j.ID)
 }
 
+// UnmarshalJSON is used to populate a job from the values in
+// the provided JSON message.
 func (j *Job) UnmarshalJSON(b []byte) error {
 	var tmp map[string]interface{}
 

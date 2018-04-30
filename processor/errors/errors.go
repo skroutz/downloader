@@ -1,4 +1,4 @@
-// errors contains types and interfaces representing download errors.
+// Package errors contains types and interfaces representing download errors.
 // It is used in the processor to encapsulate information on errors being retriable and/or
 // internal.
 package errors

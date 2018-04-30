@@ -40,9 +40,8 @@ type Check struct {
 func (e ErrMimeTypeMismatch) Error() string {
 	if e.check.negate {
 		return fmt.Sprintf("Expected mime-type not to be (%s) found - (%s)", e.check.check, e.found)
-	} else {
-		return fmt.Sprintf("Expected mime-type to be (%s), found (%s)", e.check.check, e.found)
 	}
+	return fmt.Sprintf("Expected mime-type to be (%s), found (%s)", e.check.check, e.found)
 }
 
 // New constructs a new validator.

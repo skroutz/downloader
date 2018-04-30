@@ -35,6 +35,7 @@ var (
 	// TODO: we should probably get rid of expvar to avoid such issues
 	statsID = "Notifier"
 
+	// RetryBackoffDuration indicates the time to wait between retries.
 	RetryBackoffDuration = 10 * time.Minute
 
 	// Based on http.DefaultTransport
@@ -88,7 +89,7 @@ func init() {
 	}
 }
 
-// NewNotifier takes the concurrency of the notifier as an argument
+// New takes the concurrency of the notifier as an argument
 func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string) (Notifier, error) {
 	url, err := url.ParseRequestURI(dwnlURL)
 	if err != nil {
