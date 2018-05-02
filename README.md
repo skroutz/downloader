@@ -90,3 +90,7 @@ Running the tests:
 ```shell
 $ make test
 ```
+
+Credits
+-------------------------------------------------
+downloader is released under the GNU General Public License version 3. See [COPYING](COPYING).
