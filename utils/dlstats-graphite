@@ -12,9 +12,9 @@
 #
 # Example:
 #
-#   $ ./dlstats-graphite http://dl1.skroutz.gr/stats stats.skroutz.gr:2003 5
+#   $ ./dlstats-graphite http://dl1.example.com/stats stats.example.com:2003 5
 #
-#   This will report every 5secs. to stats.skroutz.gr
+#   This will report every 5secs. to stats.example.com
 #
 abort "You must provide the stats endpoint as the first argument" if ARGV[0].nil?
 
