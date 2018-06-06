@@ -124,7 +124,7 @@ A Redis instance has to be installed for the downloader's tests to run.
 
 Dependencies are managed using [dep](https://github.com/golang/dep), so after cloning the project just run
 ```shell
-$dep ensure
+$ dep ensure
 ```
 and you'll have a fully functioning development environment.
 
