@@ -2,10 +2,34 @@
 
 
 [[projects]]
+  name = "github.com/go-kit/kit"
+  packages = ["log"]
+  revision = "ca4112baa34cb55091301bdc13b1420a122b1b9e"
+  version = "v0.7.0"
+
+[[projects]]
+  name = "github.com/go-logfmt/logfmt"
+  packages = ["."]
+  revision = "390ab7935ee28ec6b286364bba9b4dd6410cb3d5"
+  version = "v0.3.0"
+
+[[projects]]
   name = "github.com/go-redis/redis"
   packages = [".","internal","internal/consistenthash","internal/hashtag","internal/pool","internal/proto"]
   revision = "73b70592cdaa9e6abdfcfbf97b4a90d80728c836"
   version = "v6.8.0"
+
+[[projects]]
+  name = "github.com/go-stack/stack"
+  packages = ["."]
+  revision = "259ab82a6cad3992b4e21ff5cac294ccb06474bc"
+  version = "v1.7.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/kr/logfmt"
+  packages = ["."]
+  revision = "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
 
 [[projects]]
   name = "github.com/rakyll/magicmime"
@@ -28,6 +52,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c152dcd961f8cc60f56cd2c5bcb0088e4c13194c6747ffa5d57c33252249ea3d"
+  inputs-digest = "b96d6ba6962e3d82248a99f0427caaafd3ab72e2e3a075282800a2b393d3a14d"
   solver-name = "gps-cdcl"
   solver-version = 1

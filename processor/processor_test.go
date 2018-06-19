@@ -261,11 +261,11 @@ func TestChecker(t *testing.T) {
 	store.SaveAggregation(a)
 
 	jobs := []job.Job{
-		job.Job{
+		{
 			ID:     "id1",
 			AggrID: a.ID,
 		},
-		job.Job{
+		{
 			ID:     "id2",
 			AggrID: a.ID,
 		},

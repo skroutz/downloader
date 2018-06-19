@@ -14,11 +14,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-stack/stack"
 	"github.com/skroutz/downloader/api"
 	"github.com/skroutz/downloader/notifier"
 	"github.com/skroutz/downloader/processor"
 	"github.com/skroutz/downloader/storage"
 
+	klog "github.com/go-kit/kit/log"
 	"github.com/go-redis/redis"
 	"github.com/urfave/cli"
 )
@@ -29,6 +31,34 @@ var (
 )
 
 func main() {
+	w := klog.NewSyncWriter(os.Stderr)
+	logger := klog.NewLogfmtLogger(w)
+
+	file := func() interface{} {
+		return fmt.Sprintf("%s", stack.Caller(3))
+	}
+
+	lineno := func() interface{} {
+		return fmt.Sprintf("%d", stack.Caller(3))
+	}
+
+	function := func() interface{} {
+		return fmt.Sprintf("%n", stack.Caller(3))
+	}
+
+	logger = klog.With(logger, "ts", klog.DefaultTimestampUTC,
+		"app", "downloader",
+		"file", klog.Valuer(file),
+		"lineno", klog.Valuer(lineno),
+		"function", klog.Valuer(function))
+
+	host, err := os.Hostname()
+	if err != nil {
+		logger.Log("event", "error", "msg", err)
+	} else {
+		logger = klog.With(logger, "host", host)
+	}
+
 	app := cli.NewApp()
 	app.Name = "downloader"
 	app.Usage = "Async rate-limited downloading service"
@@ -56,30 +86,33 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
+				logger = klog.With(logger, "component", "api")
+
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 				storage, err := storage.New(redisClient("api", cfg.Redis.Addr))
 				if err != nil {
 					return err
 				}
-				logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
-				api := api.New(storage, c.String("host"), c.Int("port"), cfg.API.HeartbeatPath, logger)
+				api := api.New(storage, c.String("host"),
+					c.Int("port"), cfg.API.HeartbeatPath, logger)
 
 				go func() {
-					logger.Println(fmt.Sprintf("Listening on %s...", api.Server.Addr))
+					logger.Log("action", "startup", "address", api.Server.Addr)
 					err := api.Server.ListenAndServe()
 					if err != nil && err != http.ErrServerClosed {
-						logger.Fatal(err)
+						logger.Log("level", "error", "msg", err)
+						os.Exit(1)
 					}
 				}()
 
 				<-sigCh
-				logger.Println("Shutting down gracefully...")
+				logger.Log("action", "shutdown", "action_phase", "start")
 				err = api.Server.Shutdown(context.TODO())
 				if err != nil {
 					return err
 				}
-				logger.Println("Bye!")
+				logger.Log("action", "shutdown", "action_phase", "finish")
 				return nil
 			},
 			Before: parseCliConfig,
