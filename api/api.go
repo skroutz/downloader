@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	klog "github.com/go-kit/kit/log"
 	"github.com/skroutz/downloader/job"
 	"github.com/skroutz/downloader/storage"
 )
@@ -21,7 +21,7 @@ import (
 type API struct {
 	Server  *http.Server
 	Storage *storage.Storage
-	Log     *log.Logger
+	Logger  klog.Logger
 }
 
 var idgen *rng
@@ -64,7 +64,7 @@ func (as *API) stats(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(respbytes)
 	if err != nil {
-		as.Log.Println("Error reporting stats:", err)
+		as.Logger.Log("event", "error", "handler", "stats", "msg", err)
 	}
 }
 
@@ -98,7 +98,7 @@ func (as *API) retry(w http.ResponseWriter, r *http.Request) {
 
 // New creates a new API server, listening on the given host & port.
 func New(s *storage.Storage, host string, port int, heartbeatPath string,
-	logger *log.Logger) *API {
+	logger klog.Logger) *API {
 	as := &API{Storage: s}
 	mux := http.NewServeMux()
 	mux.Handle("/download", as)
@@ -111,7 +111,7 @@ func New(s *storage.Storage, host string, port int, heartbeatPath string,
 	}
 
 	as.Server = &http.Server{Handler: mux, Addr: host + ":" + strconv.Itoa(port)}
-	as.Log = logger
+	as.Logger = logger
 	return as
 }
 
@@ -148,7 +148,7 @@ func (as *API) dashboardAggregations(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	if _, err := w.Write(body); err != nil {
-		as.Log.Print("Error writing response: ", err)
+		as.Logger.Log("event", "error", "handler", "dashboardAggregations", err)
 	}
 }
 
@@ -216,7 +216,11 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.StatusInternalServerError)
 			return
 		}
-		as.Log.Printf("Created aggregation %v for %s", *aggr, j)
+		as.Logger.Log(
+			"event", "new_aggregation", "handler", "ServeHTTP",
+			"aggregation_id", aggr.ID,
+			"aggregation_limit", aggr.Limit,
+			"job_id", j.ID, "job_url", j.URL)
 	}
 
 	err = as.Storage.QueuePendingDownload(j, 0)
@@ -225,7 +229,7 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError)
 		return
 	}
-	as.Log.Println("Enqueued", j)
+	as.Logger.Log("event", "new_job", "job", j)
 
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
@@ -233,6 +237,6 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := fmt.Sprintf(`{"id":"%s"}`, j.ID)
 	_, err = w.Write([]byte(resp))
 	if err != nil {
-		as.Log.Printf("Error writing response for %s: %s", j, err)
+		as.Logger.Log("event", "error", "job", j, "action", "response_write", "msg", err)
 	}
 }

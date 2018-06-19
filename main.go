@@ -19,6 +19,7 @@ import (
 	"github.com/skroutz/downloader/processor"
 	"github.com/skroutz/downloader/storage"
 
+	klog "github.com/go-kit/kit/log"
 	"github.com/go-redis/redis"
 	"github.com/urfave/cli"
 )
@@ -62,24 +63,28 @@ func main() {
 				if err != nil {
 					return err
 				}
-				logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
+				w := klog.NewSyncWriter(os.Stderr)
+				//logger := log.New(os.Stderr, "[api] ", log.Ldate|log.Ltime)
+				logger := klog.NewLogfmtLogger(w)
+				logger = klog.With(logger, "component", "api")
 				api := api.New(storage, c.String("host"), c.Int("port"), cfg.API.HeartbeatPath, logger)
 
 				go func() {
-					logger.Println(fmt.Sprintf("Listening on %s...", api.Server.Addr))
+					logger.Log("event", "boot", "address", api.Server.Addr)
 					err := api.Server.ListenAndServe()
 					if err != nil && err != http.ErrServerClosed {
-						logger.Fatal(err)
+						logger.Log("event", "error", "action", "listen", "message", err)
+						os.Exit(1)
 					}
 				}()
 
 				<-sigCh
-				logger.Println("Shutting down gracefully...")
+				logger.Log("event", "shutdown", "action", "start")
 				err = api.Server.Shutdown(context.TODO())
 				if err != nil {
 					return err
 				}
-				logger.Println("Bye!")
+				logger.Log("event", "shutdown", "action", "finish")
 				return nil
 			},
 			Before: parseCliConfig,

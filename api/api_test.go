@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	klog "github.com/go-kit/kit/log"
 	"github.com/go-redis/redis"
 	"github.com/skroutz/downloader/job"
 	"github.com/skroutz/downloader/storage"
@@ -18,7 +19,7 @@ import (
 var (
 	Redis  = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	store  *storage.Storage
-	logger = log.New(os.Stderr, "[test-api] ", log.Ldate|log.Ltime)
+	logger klog.Logger
 )
 
 func init() {
@@ -30,6 +31,9 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	logger = klog.NewLogfmtLogger(klog.NewSyncWriter(os.Stderr))
+	logger = klog.With(logger, "component", "api")
 }
 
 func TestHandler(t *testing.T) {
