@@ -148,7 +148,7 @@ func (as *API) dashboardAggregations(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	if _, err := w.Write(body); err != nil {
-		as.Logger.Log("event", "error", "handler", "dashboardAggregations", err)
+		as.Logger.Log("event", "error", "handler", "dashboardAggregations", "msg", err)
 	}
 }
 
@@ -202,6 +202,10 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logger := klog.With(as.Logger, "handler", "ServeHTTP",
+		"aggregation_id", aggr.ID, "aggregation_limit", aggr.Limit,
+		"job_id", j.ID, "job_url", j.URL)
+
 	// TODO: do we want to throw error or override the previous aggr?
 	exists, err := as.Storage.AggregationExists(aggr)
 	if err != nil {
@@ -216,11 +220,7 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.StatusInternalServerError)
 			return
 		}
-		as.Logger.Log(
-			"event", "new_aggregation", "handler", "ServeHTTP",
-			"aggregation_id", aggr.ID,
-			"aggregation_limit", aggr.Limit,
-			"job_id", j.ID, "job_url", j.URL)
+		logger.Log("event", "new_aggregation")
 	}
 
 	err = as.Storage.QueuePendingDownload(j, 0)
@@ -229,7 +229,7 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError)
 		return
 	}
-	as.Logger.Log("event", "new_job", "job", j)
+	logger.Log("event", "job_enqueued")
 
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
@@ -237,6 +237,6 @@ func (as *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := fmt.Sprintf(`{"id":"%s"}`, j.ID)
 	_, err = w.Write([]byte(resp))
 	if err != nil {
-		as.Logger.Log("event", "error", "job", j, "action", "response_write", "msg", err)
+		logger.Log("event", "error", "action", "response_write", "msg", err)
 	}
 }
