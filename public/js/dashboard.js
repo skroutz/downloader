@@ -153,7 +153,11 @@ class ProcessorStats extends React.Component {
             </div>
             )
         }
-        const stats = Object.keys(this.state[hosts[0]].stats)
+        let keys = []
+        for (var i = 0; i < hosts.length; i++) {
+          keys.push(...Object.keys(this.state[hosts[i]].stats));
+        }
+        const stats = [...new Set(keys)];
         const rows = stats.map(
             (k) => [k, hosts.map((h) => this.state[h].stats[k])]
         )
