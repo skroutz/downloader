@@ -14,15 +14,14 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path"
 	"reflect"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
+
+	"github.com/agis/spawn"
 
 	"github.com/skroutz/downloader/notifier"
 )
@@ -35,9 +34,6 @@ type fsResponse struct {
 }
 
 var (
-	mu         sync.Mutex
-	testBinary = os.Args[0:1]
-
 	componentsWg sync.WaitGroup
 
 	// global test limit used in HTTP & disk I/O
@@ -62,32 +58,40 @@ var (
 	csPort = "9894"
 	csPath = "/callback/"
 	// callbacks from cbServer are emitted to this channel
-	callbacks = make(chan []byte, 1000)
-	cbServer  = newCallbackServer(fmt.Sprintf("%s:%s", csHost, csPort), callbacks)
+	callbacks chan []byte
+	cbServer  *http.Server
 )
 
 var testConfig string
 
 func TestMain(m *testing.M) {
-	// Hijack TestMain & spawn downloader, see spawn()
-	if os.Getenv("SPAWN_DOWNLOADER") != "" {
-		fmt.Printf("TestMain(spawn): %+v\n", os.Args)
-		main()
-		return
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-stop
-		cancel()
-	}()
-
 	flag.StringVar(&testConfig, "config", "config.test.json", "Test config")
 	flag.Parse()
 	parseConfig(testConfig)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// start API server, Processor & Notifier
+	api := spawn.New(main, "api", "--host", apiHost, "--port", apiPort, "--config", testConfig)
+	err := api.Start(ctx)
+	if err != nil {
+		panic(err)
+	}
+	waitForServer(apiPort)
+
+	processor := spawn.New(main, "processor", "--config", testConfig)
+	processor.Cmd.Env = append(processor.Cmd.Env, "DOWNLOADER_TEST_TIME=1")
+	err = processor.Start(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	notifier := spawn.New(main, "notifier", "--config", testConfig)
+	notifier.Cmd.Env = append(notifier.Cmd.Env, "DOWNLOADER_TEST_TIME=1")
+	err = notifier.Start(ctx)
+	if err != nil {
+		panic(err)
+	}
 
 	flushRedis()
 
@@ -102,6 +106,9 @@ func TestMain(m *testing.M) {
 	}()
 	waitForServer(fsPort)
 
+	callbacks = make(chan []byte, 1000)
+	cbServer = newCallbackServer(fmt.Sprintf("%s:%s", csHost, csPort), callbacks)
+
 	// start test callback server
 	componentsWg.Add(1)
 	go func() {
@@ -113,43 +120,43 @@ func TestMain(m *testing.M) {
 	}()
 	waitForServer(csPort)
 
-	// start API server, Processor & Notifier
-	start := func(args ...string) {
-		defer componentsWg.Done()
-		spawn(ctx, args...)
-	}
-
-	componentsWg.Add(1)
-	go start("api", "--host", apiHost, "--port", apiPort, "--config", testConfig)
-	waitForServer(apiPort)
-
-	componentsWg.Add(1)
-	go start("processor", "--config", testConfig)
-
-	componentsWg.Add(1)
-	go start("notifier", "--config", testConfig)
-
 	result := m.Run()
 
 	// shutdown test file server
-	log.Println("Shutting down test file server...")
-	err := fileServer.Shutdown(ctx)
+	err = fileServer.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// shutdown test callback server
-	log.Println("Shutting down test callback server...")
 	err = cbServer.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("Shutting down API, Processor & Notifier..")
-	stop <- os.Interrupt
+	// signal API, Processor & Notifier to shutdown
+	cancel()
 
+	// wait for test fileserver and callback server to shutdown
 	componentsWg.Wait()
+
 	flushRedis()
+
+	err = api.Wait()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = processor.Wait()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = notifier.Wait()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	os.Exit(result)
 }
 
@@ -628,36 +635,6 @@ func TestLoad(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-// spawn a downloader subprocess with the provided args.
-//
-// We do that by fork-executing the test binary with the special SPAWN_DOWNLOADER environment
-// variable set. TestMain() checks for SPAWN_DOWNLOADER and executes downloader's main().
-func spawn(ctx context.Context, args ...string) {
-	var cmdWg sync.WaitGroup
-
-	cmd := exec.Command(os.Args[0], args...)
-	cmd.Env = []string{"SPAWN_DOWNLOADER=1", "DOWNLOADER_TEST_TIME=1"}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		log.Fatalf("spawn(%s): %v", args[0], err)
-	}
-
-	cmdWg.Add(1)
-	go func() {
-		defer cmdWg.Done()
-		if err := cmd.Wait(); err != nil {
-			log.Fatalf("spawn(%s): %v", args[0], err)
-		}
-	}()
-
-	<-ctx.Done()
-	cmd.Process.Signal(syscall.SIGTERM)
-
-	cmdWg.Wait()
 }
 
 // blocks until a server listens on the given port
