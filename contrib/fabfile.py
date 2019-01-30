@@ -4,7 +4,7 @@ Deploy Downloader with fabric
 Usage:
 
 $ ln -s contrib/fabfile.py
-$ fab -H dl1,dl2 deploy
+$ fab -H downloader1,downloader2 deploy
 
 """
 from json import loads as json
