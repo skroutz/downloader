@@ -1,13 +1,9 @@
-package main
+package config
 
 import (
 	"encoding/json"
 	"os"
-
-	"github.com/urfave/cli"
 )
-
-var cfg Config
 
 // Config holds the app's configuration
 type Config struct {
@@ -32,20 +28,15 @@ type Config struct {
 	} `json:"notifier"`
 }
 
-func parseCliConfig(ctx *cli.Context) error {
-	return parseConfig(ctx.String("config"))
-}
-
-func parseConfig(filename string) error {
+func Parse(filename string) (Config, error) {
+	cfg := Config{}
 	f, err := os.Open(filename)
 	if err != nil {
-		return err
+		return cfg, err
 	}
 	defer f.Close()
 
 	dec := json.NewDecoder(f)
 	dec.UseNumber()
-	dec.Decode(&cfg)
-
-	return nil
+	return cfg, dec.Decode(&cfg)
 }
