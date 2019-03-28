@@ -1,9 +1,37 @@
 ![downloader](doc/downloader-service.png)
 
-Downloader is a service provided asynchronous and rate limited download capabilities.
-It is entirely written in [Go](https://golang.org/) and backed by [Redis](https://redis.io/) as a metadata storage backend.
+Downloader is a service providing asynchronous and rate-limited download
+capabilities. It is entirely written in [Go](https://golang.org/) and backed by
+[Redis](https://redis.io/) as a metadata storage backend.
 
 Visit the [wiki](../../wiki/) for documentation.
+
+Getting Started
+-------------------------------------------------------------------------------
+
+Make sure that you have a working [Go
+environment](https://golang.org/doc/install) and that you have configured your
+[`$GOPATH`](https://golang.org/doc/code.html#Workspaces) correctly.
+
+Clone the repository or `go get` it with:
+```shell
+$ go get github.com/skroutz/downloader
+```
+
+Dependencies are managed using [dep](https://github.com/golang/dep), so after
+cloning the project, just run:
+```shell
+$ dep ensure
+```
+from the project directory: `$GOPATH/src/github.com/skroutz/downloader/`.
+
+Finally, you build and install the Downloader:
+```shell
+$ go build
+$ go install
+```
+
+Enjoy! :)
 
 API
 -------------------------------------------------------------------------------
@@ -36,7 +64,7 @@ Returns a JSON list of aggregations with pending jobs.
 
 Output: JSON array of aggregation names and their pending jobs `[{"name":"jobs:super-aggregation","size":17}]`
 
-## Usage:
+## Usage
 
 Enqueueing a new download job:
 ```shell
@@ -120,20 +148,25 @@ Displayed Info:
 Development
 -------------------------------------------------------------------------------
 
-A Redis instance has to be installed for the downloader's tests to run.
+> :warning: You should have a *running* Redis instance in order to be able to
+> run the downloader's tests. Make sure to update the corresponding setting in
+> the [configuration file](config.test.json).
 
-Dependencies are managed using [dep](https://github.com/golang/dep), so after cloning the project just run
+In case you haven't done it already (as described in the [Getting
+Started](#getting-started) section), run:
 ```shell
 $ dep ensure
 ```
-and you'll have a fully functioning development environment.
+to manage the project's dependencies. Now, you will have a fully functioning
+development environment.
 
-Run tests, various checks and build project and its dependencies:
+Use `make` to run tests, perform various checks and build project and its
+dependencies:
 ```shell
 $ make
 ```
 
-Running the tests:
+E.g. to run the tests:
 ```shell
 $ make test
 ```
