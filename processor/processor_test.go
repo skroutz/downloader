@@ -38,7 +38,7 @@ var (
 func TestMain(m *testing.M) {
 	var err error
 
-	storageDir, err = ioutil.TempDir("", "downr-processor-")
+	storageDir, err = ioutil.TempDir("", "downloader-processor-")
 	if err != nil {
 		log.Fatal(err)
 	}
