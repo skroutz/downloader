@@ -1,0 +1,17 @@
+sudo: required
+language: go
+before_install:
+- curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+- sudo apt-get install -y libmagic-dev 
+go:
+- 1.12.x
+services:
+- redis
+install:
+- dep ensure
+- go get github.com/rakyll/statik
+script:
+- make check
+branches:
+  only:
+    - master
