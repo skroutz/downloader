@@ -21,8 +21,11 @@
 
 all: fmt build
 
+NEED_REFORMAT := $(shell gofmt -l . | grep -v vendor/)
 fmt:
-	! gofmt -d -e -s *.go **/*.go 2>&1 | tee /dev/tty | read
+	ifneq ($(NEED_REFORMAT),)
+		$(error "Source code needs re-formatting! Use 'go fmt' manually.")
+	endif
 
 deps:
 	dep ensure -v
