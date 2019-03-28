@@ -12,18 +12,25 @@ import (
 
 	klog "github.com/go-kit/kit/log"
 	"github.com/go-redis/redis"
+	"github.com/skroutz/downloader/config"
 	"github.com/skroutz/downloader/job"
 	"github.com/skroutz/downloader/storage"
 )
 
 var (
-	Redis  = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	store  *storage.Storage
-	logger klog.Logger
+	Redis   *redis.Client
+	store   *storage.Storage
+	logger  klog.Logger
+	testCfg = "../config.test.json"
 )
 
 func init() {
-	err := Redis.FlushDB().Err()
+	cfg, err := config.Parse(testCfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	Redis = redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr})
+	err = Redis.FlushDB().Err()
 	if err != nil {
 		log.Fatal(err)
 	}
