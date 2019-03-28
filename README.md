@@ -6,6 +6,8 @@ capabilities. It is entirely written in [Go](https://golang.org/) and backed by
 
 Visit the [wiki](../../wiki/) for documentation.
 
+[![Build Status](https://travis-ci.com/skroutz/downloader.svg?branch=master)](https://travis-ci.com/skroutz/downloader)
+
 Getting Started
 -------------------------------------------------------------------------------
 
