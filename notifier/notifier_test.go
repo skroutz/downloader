@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/skroutz/downloader/config"
 	"github.com/skroutz/downloader/job"
 	"github.com/skroutz/downloader/storage"
 
@@ -14,15 +15,21 @@ import (
 )
 
 var (
-	Redis    = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	Redis    *redis.Client
 	cbServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}))
-	store  *storage.Storage
-	logger = log.New(os.Stderr, "[test-notifier] ", log.Ldate|log.Ltime)
+	store   *storage.Storage
+	logger  = log.New(os.Stderr, "[test-notifier] ", log.Ldate|log.Ltime)
+	testCfg = "../config.test.json"
 )
 
 func init() {
-	err := Redis.FlushDB().Err()
+	cfg, err := config.Parse(testCfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	Redis = redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr})
+	err = Redis.FlushDB().Err()
 	if err != nil {
 		log.Fatal(err)
 	}

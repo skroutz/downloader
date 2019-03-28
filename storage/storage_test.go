@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/go-redis/redis"
+	"github.com/skroutz/downloader/config"
 	"github.com/skroutz/downloader/job"
 )
 
 var (
 	Redis   *redis.Client
 	storage *Storage
+	testCfg = "../config.test.json"
 	testJob = job.Job{
 		ID:          "TestJob",
 		URL:         "http://localhost:12345",
@@ -21,14 +23,20 @@ var (
 
 func init() {
 	var err error
-
-	Redis = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	storage, err = New(Redis)
+	cfg, err := config.Parse(testCfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	Redis = redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr})
+	err = Redis.FlushDB().Err()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	Redis.FlushDB()
+	storage, err = New(Redis)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func TestSaveJob(t *testing.T) {

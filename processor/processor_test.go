@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
+	"github.com/skroutz/downloader/config"
 	"github.com/skroutz/downloader/job"
 	"github.com/skroutz/downloader/processor/diskcheck"
 	"github.com/skroutz/downloader/storage"
@@ -31,17 +32,23 @@ var (
 	defaultAggr      = job.Aggregation{ID: "FooBar", Limit: 1}
 	defaultProcessor Processor
 	defaultWP        workerPool
+	testCfg          = "../config.test.json"
 )
 
 func TestMain(m *testing.M) {
 	var err error
 
-	storageDir, err = ioutil.TempDir("", "downloader-processor-")
+	storageDir, err = ioutil.TempDir("", "downr-processor-")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	Redis = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	cfg, err := config.Parse(testCfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	Redis = redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr})
 	err = Redis.FlushDB().Err()
 	if err != nil {
 		log.Fatal(err)
