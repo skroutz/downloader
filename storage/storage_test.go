@@ -22,7 +22,6 @@ var (
 )
 
 func init() {
-	var err error
 	cfg, err := config.Parse(testCfg)
 	if err != nil {
 		log.Fatal(err)

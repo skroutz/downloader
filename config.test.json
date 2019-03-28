@@ -7,7 +7,7 @@
 	},
 	"processor": {
 		"storage_dir":"/tmp/",
-    "user_agent": "Downloader v1",
+		"user_agent": "Downloader v1",
 		"stats_interval": 300
 	},
 	"notifier": {
