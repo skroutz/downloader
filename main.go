@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-stack/stack"
 	"github.com/skroutz/downloader/api"
+	"github.com/skroutz/downloader/config"
 	"github.com/skroutz/downloader/notifier"
 	"github.com/skroutz/downloader/processor"
 	"github.com/skroutz/downloader/storage"
@@ -28,6 +29,7 @@ import (
 var (
 	sigCh   = make(chan os.Signal, 1)
 	Version string
+	cfg     config.Config
 )
 
 func main() {
@@ -211,6 +213,12 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func parseCliConfig(ctx *cli.Context) error {
+	var err error
+	cfg, err = config.Parse(ctx.String("config"))
+	return err
 }
 
 func redisClient(name, addr string) *redis.Client {

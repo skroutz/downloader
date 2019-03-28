@@ -23,6 +23,7 @@ import (
 
 	"github.com/agis/spawn"
 
+	"github.com/skroutz/downloader/config"
 	"github.com/skroutz/downloader/notifier"
 )
 
@@ -67,13 +68,17 @@ var testConfig string
 func TestMain(m *testing.M) {
 	flag.StringVar(&testConfig, "config", "config.test.json", "Test config")
 	flag.Parse()
-	parseConfig(testConfig)
+	var err error
+	cfg, err = config.Parse(testConfig)
+	if err != nil {
+		panic(err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// start API server, Processor & Notifier
 	api := spawn.New(main, "api", "--host", apiHost, "--port", apiPort, "--config", testConfig)
-	err := api.Start(ctx)
+	err = api.Start(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -93,7 +98,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	flushRedis()
+	flushRedis(cfg.Redis.Addr)
 
 	// start test file server
 	componentsWg.Add(1)
@@ -140,7 +145,7 @@ func TestMain(m *testing.M) {
 	// wait for test fileserver and callback server to shutdown
 	componentsWg.Wait()
 
-	flushRedis()
+	flushRedis(cfg.Redis.Addr)
 
 	err = api.Wait()
 	if err != nil {
@@ -722,9 +727,8 @@ func newCallbackServer(addr string, ch chan []byte) *http.Server {
 	}
 }
 
-// TODO: should read addr from config
-func flushRedis() {
-	err := redisClient("test", "localhost:6379").FlushDB().Err()
+func flushRedis(address string) {
+	err := redisClient("test", address).FlushDB().Err()
 	if err != nil {
 		log.Fatal(err)
 	}
