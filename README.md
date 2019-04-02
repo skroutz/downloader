@@ -18,18 +18,20 @@ Clone the repository or `go get` it with:
 $ go get github.com/skroutz/downloader
 ```
 
-Dependencies are managed using [dep](https://github.com/golang/dep), so after
-cloning the project, just run:
+Dependencies are managed using [dep](https://github.com/golang/dep). So after
+cloning the project, just run `make` to install the dependencies and build the
+package from the project directory `$GOPATH/src/github.com/skroutz/downloader/`:
 ```shell
-$ dep ensure
+$ make
 ```
-from the project directory: `$GOPATH/src/github.com/skroutz/downloader/`.
 
-Finally, you build and install the Downloader:
+Finally, to install the Downloader, just run:
 ```shell
-$ go build
-$ go install
+$ make install
 ```
+
+For more information about the supported make targets, please read the
+**Synopsis** sections in the package's Makefile.
 
 Enjoy! :)
 
@@ -77,7 +79,7 @@ Example Callback payloads:
  * Successful download callback:
 
 ```json
-{  
+{
    "success":true,
    "error":"",
    "extra":"foobar",
@@ -155,20 +157,14 @@ Development
 In case you haven't done it already (as described in the [Getting
 Started](#getting-started) section), run:
 ```shell
-$ dep ensure
+$ make
 ```
 to manage the project's dependencies. Now, you will have a fully functioning
 development environment.
 
-Use `make` to run tests, perform various checks and build project and its
-dependencies:
+To run the tests and perform various package-related checks, just run:
 ```shell
-$ make
-```
-
-E.g. to run the tests:
-```shell
-$ make test
+$ make check
 ```
 
 Credits
