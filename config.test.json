@@ -14,5 +14,10 @@
 		"download_url": "http://localhost/foo",
 		"concurrency": 10,
 		"stats_interval": 300
+	},
+	"backends": {
+		"http": {
+			"timeout": 30
+		}
 	}
 }

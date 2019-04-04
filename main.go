@@ -188,7 +188,7 @@ func main() {
 				}
 
 				closeChan := make(chan struct{})
-				go notifier.Start(closeChan)
+				go notifier.Start(closeChan, cfg.Backends)
 
 				<-sigCh
 				notifier.Log.Println("Shutting down...")

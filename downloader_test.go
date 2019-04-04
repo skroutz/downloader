@@ -24,7 +24,7 @@ import (
 	"github.com/agis/spawn"
 
 	"github.com/skroutz/downloader/config"
-	"github.com/skroutz/downloader/notifier"
+	"github.com/skroutz/downloader/job"
 )
 
 type testJob map[string]interface{}
@@ -187,7 +187,7 @@ func TestResourceExists(t *testing.T) {
 	}
 
 	// Test callback mechanism (Notifier)
-	var ci notifier.CallbackInfo
+	var ci job.Callback
 
 	select {
 	case <-time.After(timeout):
@@ -281,7 +281,7 @@ FILECHECK:
 }
 
 func TestResourceDontExist(t *testing.T) {
-	var ci notifier.CallbackInfo
+	var ci job.Callback
 
 	resourceURL := downloadURL("i-dont-exist.foo")
 	job := testJob{
@@ -328,7 +328,7 @@ func TestResourceDontExist(t *testing.T) {
 }
 
 func TestMimeTypeMismatch(t *testing.T) {
-	var ci notifier.CallbackInfo
+	var ci job.Callback
 
 	resourceURL := downloadURL("tiny.png")
 	job := testJob{
@@ -363,7 +363,7 @@ func TestMimeTypeMismatch(t *testing.T) {
 
 // test a download URL that will fail the first 2 times but succeeds the 3rd
 func TestTransientDownstreamError(t *testing.T) {
-	var ci notifier.CallbackInfo
+	var ci job.Callback
 
 	resourceURL := fmt.Sprintf("http://%s:%s%ssample-1.jpg", fsHost, fsPort, fsPath)
 
@@ -416,7 +416,7 @@ func TestTransientDownstreamError(t *testing.T) {
 	}
 }
 func TestUnexpectedReadError(t *testing.T) {
-	var ci notifier.CallbackInfo
+	var ci job.Callback
 
 	resourceURL := downloadURL("200")
 
@@ -602,7 +602,7 @@ func TestLoad(t *testing.T) {
 	}
 	close(attrs)
 
-	var ci notifier.CallbackInfo
+	var ci job.Callback
 	results := make(map[bool]int, nreqs)
 
 	for i := 0; i < nreqs; i++ {

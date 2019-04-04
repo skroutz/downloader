@@ -354,6 +354,10 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			j.DownloadMeta = v
 		case "CallbackURL":
 			j.CallbackURL = v
+		case "CallbackType":
+			j.CallbackType = v
+		case "CallbackDst":
+			j.CallbackDst = v
 		case "CallbackCount":
 			j.CallbackCount, err = strconv.Atoi(v)
 			if err != nil {

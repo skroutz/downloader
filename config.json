@@ -14,5 +14,18 @@
 		"download_url": "http://localhost/foo",
 		"concurrency": 10,
 		"stats_interval": 5000
+	},
+	"backends": {
+		"http": {
+			"timeout": 30
+		},
+		"kafka": {
+			"bootstrap.servers": "localhost:9092",
+			"api.version.request": true,
+			"log.connection.close": false,
+			"go.delivery.reports": true,
+			"message.send.max.retries": 3,
+			"request.required.acks": -1
+		}
 	}
 }

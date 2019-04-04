@@ -26,8 +26,11 @@ type Config struct {
 		Concurrency   int    `json:"concurrency"`
 		StatsInterval int    `json:"stats_interval"`
 	} `json:"notifier"`
+
+	Backends map[string]map[string]interface{}
 }
 
+// Parse loads a given file name and creates a Configuration
 func Parse(filename string) (Config, error) {
 	cfg := Config{}
 	f, err := os.Open(filename)

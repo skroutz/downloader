@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/skroutz/downloader/processor/mimetype"
 )
+
+// State represents the download & callback states.
+// For valid values see constants below.
+type State string
 
 // The available states of a job's DownloadState/CallbackState.
 const (
@@ -47,7 +52,11 @@ type Job struct {
 	DownloadMeta string `json:"-"`
 
 	CallbackState State  `json:"-"`
-	CallbackURL   string `json:"callback_url"`
+	CallbackType  string `json:"callback_type"`
+	CallbackDst   string `json:"callback_dst"`
+	// TODO: Remove CallbackURL, in favor of CallbackType and CallbackDst, after
+	// all users of Downloader have upgraded their request scheme.
+	CallbackURL string `json:"callback_url"`
 
 	// Auxiliary ad-hoc information used for debugging.
 	CallbackMeta string `json:"-"`
@@ -65,10 +74,6 @@ type Job struct {
 	// Mime type pattern provided by the client
 	MimeType string `json:"mime_type"`
 }
-
-// State represents the download & callback states.
-// For valid values see constants below.
-type State string
 
 // MarshalBinary is used by redis driver to marshall custom type State
 func (s State) MarshalBinary() (data []byte, err error) {
@@ -110,14 +115,41 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 	j.AggrID = aggrID
 
 	cbURL, ok := tmp["callback_url"].(string)
-	if !ok {
-		return errors.New("callback_url must be a string")
+	if ok {
+		_, err = url.ParseRequestURI(cbURL)
+		if err != nil {
+			return errors.New("Could not parse callback URL: " + err.Error())
+		}
+		j.CallbackURL = cbURL
 	}
-	_, err = url.ParseRequestURI(cbURL)
-	if err != nil {
-		return errors.New("Could not parse callback URL: " + err.Error())
+
+	// Check if callback_type and callback_dst are present
+	// only if callback_url is empty
+	if j.CallbackURL == "" {
+		cbType, ok := tmp["callback_type"].(string)
+		if !ok {
+			return errors.New("callback_type must be a string")
+		}
+
+		cbDst, ok := tmp["callback_dst"].(string)
+		if !ok {
+			return errors.New("callback_dst must be a string")
+		}
+
+		if cbType == "" || cbDst == "" {
+			return fmt.Errorf("You need to provide both callback_type (%#v) and callback_dst (%#v)", cbType, cbDst)
+		}
+
+		if strings.HasPrefix(cbDst, "http") {
+			_, err = url.ParseRequestURI(cbDst)
+			if err != nil {
+				return errors.New("Could not parse URL: " + err.Error())
+			}
+		}
+
+		j.CallbackType = cbType
+		j.CallbackDst = cbDst
 	}
-	j.CallbackURL = cbURL
 
 	extra, ok := tmp["extra"].(string)
 	if ok {
@@ -139,6 +171,33 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 	j.MimeType = ""
 
 	return nil
+}
+
+// CallbackInfo validates the state of a job and returns a callback info
+// along with an error if appropriate. The expected argument downloadURL is
+// the base path of a downloaded resource in the downloader.
+func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
+	var dwURL string
+
+	if j.DownloadState != StateSuccess && j.DownloadState != StateFailed {
+		return Callback{}, fmt.Errorf("Invalid job download state: '%s'", j.DownloadState)
+	}
+
+	if j.DownloadState == StateSuccess {
+		downloadURL.Path = path.Join(downloadURL.Path, j.Path())
+		dwURL = downloadURL.String()
+	}
+
+	return Callback{
+		Success:      j.DownloadState == StateSuccess,
+		Error:        j.DownloadMeta,
+		Extra:        j.Extra,
+		ResourceURL:  j.URL,
+		DownloadURL:  dwURL,
+		JobID:        j.ID,
+		ResponseCode: j.ResponseCode,
+		Delivered:    true,
+	}, nil
 }
 
 func (j Job) String() string {
