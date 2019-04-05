@@ -71,10 +71,29 @@ Output: JSON array of aggregation names and their pending jobs `[{"name":"jobs:s
 
 ## Usage
 
-Enqueueing a new download job:
+### Configuration
+A sample configuration can be found in `config.json` file.
+It is important to note that the Notifier component depends on the config file
+in order to correctly enable the backends that are defined in the config's `backends` key.
+
+If no backends are given the Notifier will throw an error and exit with a non-zero code.
+If you want to enable the http backend add the `http` key along with its `timeout` value.
+If you want to enable the kafka backend add the `kafka` key along with your desired configuration.
+
+Below you can find examples of jobs enqueueing and callbacks payloads
+
+#### Example using `http` as backend
+
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_url":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*"}' https://downloader.example.com/download
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_type": "http", "callback_dst":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*"}' https://downloader.example.com/download
 # => {"id":"NSb4FOAs9fVaQw"}
+```
+
+#### Example using `kafka` as backend
+Suppose you have already configured a kafka cluster and created a topic `dwl_images`.
+```shell
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*"}' http://localhost:8000/download
+# => {"id":"Hl2VErjyL5UK9A"}
 ```
 
 Example Callback payloads:
@@ -89,7 +108,9 @@ Example Callback payloads:
    "resource_url":"https://httpbin.org/image/png",
    "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
    "job_id":"6QEywYsd0jrKAg",
-   "response_code":200
+   "response_code":200,
+   "delivered":true,
+   "delivery_error":""
 }
 ```
 
@@ -105,7 +126,9 @@ Unsuccessful Callback Examples:
    "resource_url":"https://httpbin.org/image/png",
    "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
    "job_id":"6QEywYsd0jrKAg",
-   "response_code":404
+   "response_code":404,
+   "delivered":true,
+   "delivery_error":""
 }
 ```
 
@@ -119,7 +142,9 @@ Unsuccessful Callback Examples:
    "resource_url":"https://httpbin.org/image/png",
    "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
    "job_id":"6QEywYsd0jrKAg",
-   "response_code":0
+   "response_code":0,
+   "delivered":true,
+   "delivery_error":""
 }
 ```
 
@@ -133,13 +158,15 @@ Unsuccessful Callback Examples:
    "resource_url":"https://httpbin.org/image/png",
    "download_url":"http://localhost/foo/6QE/6QEywYsd0jrKAg",
    "job_id":"6QEywYsd0jrKAg",
-   "response_code":200
+   "response_code":200,
+   "delivered":true,
+   "delivery_error":""
 }
 ```
 
-Any 2XX response to the callback POST marks the callback as successful for the current job.
-As a special case, if a 202 response code is received the job is additionally marked for deletion as not needed any more by the client.
-This deletes the job in Redis along with its associated downloaded file.
+For http as a notifier backend any 2XX response to the callback POST marks the callback as successful for the current job.
+For kafka as a notifier backend, we monitor kafka's `Events` channel and mark a job's callback as successful if the delivery report
+of a job's callback has been received and has no errors.
 
 Web UI
 ------------------------------------------------------------------------------
