@@ -21,11 +21,11 @@
 
 all: fmt build
 
-NEED_REFORMAT := $(shell gofmt -l . | grep -v vendor/)
 fmt:
-	ifneq ($(NEED_REFORMAT),)
-		$(error "Source code needs re-formatting! Use 'go fmt' manually.")
-	endif
+	@if [ -n "$(shell gofmt -l . | grep -v vendor/)" ]; then \
+		echo "Source code needs re-formatting! Use 'go fmt' manually."; \
+		false; \
+	fi
 
 deps:
 	dep ensure -v
