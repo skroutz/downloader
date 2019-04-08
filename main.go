@@ -187,6 +187,14 @@ func main() {
 					notifier.StatsIntvl = time.Duration(cfg.Notifier.StatsInterval) * time.Millisecond
 				}
 
+				if cfg.Notifier.DeletionInterval > 0 {
+					notifier.DeletionIntvl = time.Duration(cfg.Notifier.DeletionInterval) * time.Minute
+				} else {
+					logger.Fatalf("You need to provide a positive integer for the deletion_interval setting. " +
+						"The setting is important and represents the amount of time in minutes, that a file " +
+						"will be scheduled for deletion, after a job's callback has been delivered successfully.")
+				}
+
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan, cfg.Backends)
 

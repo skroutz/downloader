@@ -222,10 +222,11 @@ func (s *Storage) QueuePendingCallback(j *job.Job, delay time.Duration) error {
 }
 
 // QueueJobForDeletion pushes the provided job id to RIPQueue and returns any errors
-func (s *Storage) QueueJobForDeletion(id string) error {
+// The job deletion can be delayed by the specified delay minutes.
+func (s *Storage) QueueJobForDeletion(id string, delay time.Duration) error {
 	z := redis.Z{
 		Member: id,
-		Score:  float64(time.Now().Unix()),
+		Score:  float64(time.Now().Add(delay).Unix()),
 	}
 	return s.Redis.ZAdd(RIPQueue, z).Err()
 }

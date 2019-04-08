@@ -731,7 +731,7 @@ func (p *Processor) reaper(ctx context.Context) {
 		default:
 			j, err := p.Storage.PopRip()
 			if err != nil {
-				if err == storage.ErrEmptyQueue {
+				if err == storage.ErrEmptyQueue || err == storage.ErrRetryLater {
 					time.Sleep(backoffDuration)
 				} else {
 					p.Log.Println("Error popping job from RipQueue", err)
@@ -740,12 +740,15 @@ func (p *Processor) reaper(ctx context.Context) {
 			}
 
 			filePath := path.Join(p.StorageDir, j.Path())
-			p.Log.Printf("reaper: Deleting file [%s] for job %s", filePath, j)
 			err = os.Remove(filePath)
 			if err != nil && !os.IsNotExist(err) {
 				p.Log.Printf("Error: Could not delete [%s] for job: %s, %s", filePath, j, err.Error())
 				p.stats.Add(statsReaperFailures, 1)
 				continue
+			}
+
+			if err == nil {
+				p.Log.Printf("reaper: Deleted file [%s] for job %s", filePath, j)
 			}
 
 			err = p.Storage.RemoveJob(j.ID)

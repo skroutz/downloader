@@ -54,6 +54,10 @@ type Notifier struct {
 	DownloadURL *url.URL
 	StatsIntvl  time.Duration
 
+	// DeletionIntvl indicates the time after which downloaded files must be
+	// enqueued for deletion.
+	DeletionIntvl time.Duration
+
 	// TODO: These should be exported
 	concurrency int
 	client      *http.Client
@@ -286,6 +290,12 @@ func (n *Notifier) handleCallbackInfo(cbInfo job.Callback) error {
 		if err != nil {
 			return fmt.Errorf("Could not remove job %s. Operation returned error: %s", cbInfo.JobID, err)
 		}
+
+		err = n.Storage.QueueJobForDeletion(cbInfo.JobID, n.DeletionIntvl)
+		if err != nil {
+			return fmt.Errorf("Error: Could not queue job for deletion %s", err)
+		}
+
 		return nil
 	}
 

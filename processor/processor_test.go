@@ -149,14 +149,17 @@ func TestReaper(t *testing.T) {
 
 	cases := []struct {
 		Job     job.Job
+		Delay   time.Duration
 		InRedis bool
 	}{
 		{
 			job.Job{ID: "RIPinRedis"},
+			time.Minute * 0,
 			true,
 		},
 		{
 			job.Job{ID: "RIPGhost"},
+			time.Minute * 0,
 			false,
 		},
 	}
@@ -174,7 +177,7 @@ func TestReaper(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = store.QueueJobForDeletion(tc.Job.ID)
+		err = store.QueueJobForDeletion(tc.Job.ID, tc.Delay)
 		if err != nil {
 			t.Fatal(err)
 		}

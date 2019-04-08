@@ -13,7 +13,8 @@
 	"notifier": {
 		"download_url": "http://localhost/foo",
 		"concurrency": 10,
-		"stats_interval": 300
+		"stats_interval": 300,
+		"deletion_interval": 1
 	},
 	"backends": {
 		"http": {
