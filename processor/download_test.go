@@ -23,7 +23,10 @@ func TestPerformUserAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.UserAgent = "Downloader Test"
-	wp := p.newWorkerPool(defaultAggr)
+	wp, err := p.newWorkerPool(*defaultAggr)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	j := getTestJob(t)
 	var ua = make(chan string)
@@ -45,6 +48,46 @@ func TestPerformUserAgent(t *testing.T) {
 	actual := <-ua
 	if actual != p.UserAgent {
 		t.Fatalf("Expected User-Agent to be %s, got %s", p.UserAgent, actual)
+	}
+	wg.Wait()
+}
+
+func TestProxy(t *testing.T) {
+	var wg sync.WaitGroup
+	//Since we are messing with the default settings, we create a new processor here
+	p, err := New(store, 1, storageDir, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := job.NewAggregation("proxyfoo", 2, "http://www.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.SaveAggregation(a)
+
+	wp, err := p.newWorkerPool(*a)
+	if err != nil {
+		t.Fatalf("Failed to initialize WorkerPool %s", err)
+	}
+
+	// used to check Proxy for the http Client
+	req, err := http.NewRequest("GET", "www.google.com", nil)
+	if err != nil {
+		t.Fatal("Failed to initialize request")
+	}
+	trans, ok := wp.client.Transport.(*http.Transport)
+	if !ok {
+		log.Fatal("Expected to be Transport")
+	}
+	proxyURL, err := trans.Proxy(req)
+	if err != nil {
+		log.Fatal("Expected to fetch a valid proxy", err)
+	}
+	actual := proxyURL.String()
+
+	if actual != a.Proxy {
+		t.Fatalf("Expected Proxy to be %s, got %s", a.Proxy, actual)
 	}
 	wg.Wait()
 }

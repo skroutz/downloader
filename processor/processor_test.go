@@ -29,7 +29,7 @@ var (
 	logger           = log.New(os.Stderr, "[test processor]", log.Ldate|log.Ltime|log.Lshortfile)
 	mux              = http.NewServeMux()
 	server           = httptest.NewServer(mux)
-	defaultAggr      = job.Aggregation{ID: "FooBar", Limit: 1}
+	defaultAggr, _   = job.NewAggregation("FooBar", 1, "")
 	defaultProcessor Processor
 	defaultWP        workerPool
 	testCfg          = "../config.test.json"
@@ -71,7 +71,10 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	defaultWP = defaultProcessor.newWorkerPool(defaultAggr)
+	defaultWP, err = defaultProcessor.newWorkerPool(*defaultAggr)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	exit := m.Run()
 
@@ -267,7 +270,7 @@ func TestChecker(t *testing.T) {
 	testChecker.Sick()
 	time.Sleep(10 * time.Millisecond)
 
-	a, _ := job.NewAggregation("foobar", 2)
+	a, _ := job.NewAggregation("foobar", 2, "")
 	store.SaveAggregation(a)
 
 	jobs := []job.Job{
