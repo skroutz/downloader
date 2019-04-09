@@ -2,7 +2,10 @@ sudo: required
 language: go
 before_install:
 - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-- sudo apt-get install -y libmagic-dev
+- wget -qO - https://packages.confluent.io/deb/5.2/archive.key | sudo apt-key add -
+- sudo add-apt-repository "deb [arch=amd64] https://packages.confluent.io/deb/5.2 stable main"
+- sudo apt-get update
+- sudo apt-get install -y libmagic-dev librdkafka-dev
 go:
 - 1.12.1
 services:
@@ -11,7 +14,6 @@ install:
 - dep ensure
 - go get github.com/rakyll/statik
 script:
-- rm -rf /home/travis/.cache/go-build/*
 - make check
 branches:
   only:
