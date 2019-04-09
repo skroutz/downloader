@@ -2,15 +2,16 @@ sudo: required
 language: go
 before_install:
 - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-- sudo apt-get install -y libmagic-dev 
+- sudo apt-get install -y libmagic-dev
 go:
-- 1.12.x
+- 1.12.1
 services:
 - redis
 install:
 - dep ensure
 - go get github.com/rakyll/statik
 script:
+- rm -rf /home/travis/.cache/go-build/*
 - make check
 branches:
   only:
