@@ -1,6 +1,8 @@
 """
 Deploy Downloader with fabric
 
+Note: Needs fabric 1.x
+
 Usage:
 
 $ ln -s contrib/fabfile.py
