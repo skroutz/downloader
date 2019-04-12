@@ -201,6 +201,7 @@ func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
 }
 
 func (j Job) String() string {
-	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, callback_url:%s}",
-		j.ID, j.AggrID, j.URL, j.CallbackURL)
+	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, callback_url:%s, "+
+		"callback_type:%s, callback_dst:%s}",
+		j.ID, j.AggrID, j.URL, j.CallbackURL, j.CallbackType, j.CallbackDst)
 }
