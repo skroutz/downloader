@@ -7,7 +7,7 @@ before_install:
 - sudo apt-get update
 - sudo apt-get install -y libmagic-dev librdkafka-dev
 go:
-- 1.12.1
+- 1.12.x
 services:
 - redis
 install:
