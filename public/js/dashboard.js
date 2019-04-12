@@ -1,6 +1,7 @@
 const LivenessRoot = document.getElementById('js-liveness')
 const AggregationsRoot = document.getElementById('js-aggregations')
-const StatsRoot = document.getElementById('js-stats')
+const ProcessorStatsRoot = document.getElementById('processor-stats')
+const NotifierStatsRoot = document.getElementById('notifier-stats')
 
 class Liveness extends React.Component {
     constructor(props) {
@@ -115,76 +116,91 @@ class Aggregations extends React.Component {
     }
 }
 
-class ProcessorStats extends React.Component {
-    constructor(props) {
-        super(props)
-        this.every = props.every
-        this.state = {}
-    }
+class BaseStats extends React.Component {
+  constructor(props) {
+    super(props)
+    this.every = props.every
+    this.state = {}
+    this.name = props.name
+  }
 
-    fetch() {
-        Hosts.forEach(async (h) => {
-            const reply = await fetch(`${h}/stats/processor`)
-            const stats = await reply.json()
-            let stat = {}
-            stat[h] = {
-                stats: stats,
-                lastPing: new Date(),
-            }
-            this.setState(stat)
-        })
-    }
+  fetch() {
+    Hosts.forEach(async (h) => {
+      const reply = await fetch(`${h}/stats/${this.name}`)
+      const stats = await reply.json()
+      let stat = {}
+      stat[h] = {
+        stats: stats,
+        lastPing: new Date(),
+      }
+      this.setState(stat)
+    })
+  }
+  componentDidMount() {
+    this.fetch()
+    this.interval = setInterval(() => this.fetch(), this.every)
+  }
 
-    componentDidMount() {
-        this.fetch()
-        this.interval = setInterval(() => this.fetch(), this.every)
-    }
+  componentWillUnmount() {
+    clearInterval(this.interval)
+  }
 
-    componentWillUnmount() {
-        clearInterval(this.interval)
-    }
-
-    render() {
-        const hosts = Object.keys(this.state)
-        if (hosts.length == 0) {
-            return (
-                <div class="callout secondary">
-                <h5>No Stats found :(</h5>
-            </div>
-            )
-        }
-        let keys = []
-        for (var i = 0; i < hosts.length; i++) {
-          keys.push(...Object.keys(this.state[hosts[i]].stats));
-        }
-        const stats = [...new Set(keys)];
-        const rows = stats.map(
-            (k) => [k, hosts.map((h) => this.state[h].stats[k])]
-        )
-
-        return (
-            <table class="unstripped">
-            <thead>
-            <th>Stats</th>
-                { hosts.map((h) => <th>{h}</th>)}
-            </thead>
-            <tbody>
-                { rows.map((k) =>
-                <tr>
-                    <td>{k[0]}</td>
-                    { k[1].map((h) => <td>{h}</td>)}
-                </tr>
-                )}
-            </tbody>
-
-            { hosts.map((h) =>
-            <Liveness staleAfter={this.every+1000} ping={this.state[h].lastPing}>
-                {h}
-            </Liveness>)}
-            </table>
+  render() {
+    const hosts = Object.keys(this.state)
+    if (hosts.length == 0) {
+      return (
+        <div class="callout secondary">
+        <h5>No Stats found :(</h5>
+          </div>
         )
     }
+    let keys = []
+    for (var i = 0; i < hosts.length; i++) {
+      keys.push(...Object.keys(this.state[hosts[i]].stats));
+    }
+    const stats = [...new Set(keys)];
+    const rows = stats.map(
+      (k) => [k, hosts.map((h) => this.state[h].stats[k])]
+    )
+
+    return (
+      <table class="unstripped">
+      <thead>
+      <th>{this.name} Stats</th>
+      { hosts.map((h) => <th>{h}</th>)}
+      </thead>
+      <tbody>
+      { rows.map((k) =>
+        <tr>
+        <td>{k[0]}</td>
+        { k[1].map((h) => <td>{h}</td>)}
+        </tr>
+      )}
+      </tbody>
+
+      { hosts.map((h) =>
+        <Liveness staleAfter={this.every+1000} ping={this.state[h].lastPing}>
+        {this.name}: {h}
+        </Liveness>)}
+      </table>
+    )
+  }
+}
+
+class NotifierStats extends BaseStats {
+  constructor(props) {
+    props.name = "notifier"
+    super(props)
+  }
+}
+
+class ProcessorStats extends BaseStats {
+  constructor(props) {
+    props.name = "processor"
+    super(props)
+  }
 }
 
 ReactDOM.render(<Aggregations every={5000} />, AggregationsRoot)
-ReactDOM.render(<ProcessorStats every={5000} />, StatsRoot)
+ReactDOM.render(<ProcessorStats every={5000} />, ProcessorStatsRoot)
+ReactDOM.render(<NotifierStats every={5000} />, NotifierStatsRoot)
