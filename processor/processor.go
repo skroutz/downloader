@@ -561,6 +561,15 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		req.Header.Set("User-Agent", wp.p.UserAgent)
 	}
 
+	// DownloadTimeout might be different than zero in case Job has been initalized
+	// with custom valid timeout, so this timeout will be used intead of the default.
+	if j.DownloadTimeout > 0 {
+		var cancel context.CancelFunc
+		timeout := time.Duration(j.DownloadTimeout)
+		ctx, cancel = context.WithTimeout(ctx, timeout*time.Second)
+		defer cancel()
+	}
+
 	resp, err := wp.client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
@@ -786,6 +795,5 @@ func getClient(proxy string) (*http.Client, error) {
 
 	return &http.Client{
 		Transport: httpTransport(proxyURL),
-		Timeout:   10 * time.Second,
 	}, nil
 }

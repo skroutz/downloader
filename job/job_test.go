@@ -25,6 +25,14 @@ func TestUnmarshalJSON(t *testing.T) {
 		`{"aggr_id":"foo","url":"http://foobar.com","callback_url":"http://foo.bar"}`:                     false,
 		`{"aggr_id":"foo", "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`: false,
 		`{"aggr_id":"foo","url":"http://foobar.com","callback_url":"http://foo.bar","extra":""}`:          false,
+
+		// timeout
+		`{"aggr_id":"timeoutfoo", "download_timeout":12, "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:   false,
+		`{"aggr_id":"timeoutfoo", "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:                          false,
+		`{"aggr_id":"timeoutfoo", "download_timeout":null, "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`: true,
+		`{"aggr_id":"timeoutfoo", "download_timeout":0, "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:    true,
+		`{"aggr_id":"timeoutfoo", "download_timeout":-2, "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:   true,
+		`{"aggr_id":"timeoutfoo", "download_timeout":"4", "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:  true,
 	}
 
 	for data, expectErr := range tc {

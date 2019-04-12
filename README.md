@@ -54,6 +54,7 @@ Parameters:
  * `callback_url`: string, The endpoint on which the job callback request will be performed.
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
+ * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
 
 Output: JSON document containing the download's id e.g, `{"id":"NSb4FOAs9fVaQw"}`
 
