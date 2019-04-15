@@ -76,6 +76,9 @@ type Job struct {
 
 	// Http client timeout for download in seconds
 	DownloadTimeout int `json:"download_timeout"`
+
+	// The User-Agent to set in download requests
+	UserAgent string `json:"user_agent"`
 }
 
 // MarshalBinary is used by redis driver to marshall custom type State
@@ -187,6 +190,15 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 	}
 	j.DownloadTimeout = timeout
 
+	var useragent string
+	if useragentField, ok := tmp["user_agent"]; ok {
+		useragent, ok = useragentField.(string)
+		if !ok {
+			return errors.New("UserAgent must be a string")
+		}
+	}
+	j.UserAgent = useragent
+
 	return nil
 }
 
@@ -219,6 +231,6 @@ func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
 
 func (j Job) String() string {
 	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, callback_url:%s, "+
-		"callback_type:%s, callback_dst:%s, Timeout:%d}",
-		j.ID, j.AggrID, j.URL, j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout)
+		"callback_type:%s, callback_dst:%s, Timeout:%d, UserAgent:%s}",
+		j.ID, j.AggrID, j.URL, j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout, j.UserAgent)
 }

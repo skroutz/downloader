@@ -557,7 +557,10 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		// This actually indicates a malformed url
 		return derrors.E("creating request", err)
 	}
-	if wp.p.UserAgent != "" {
+
+	if j.UserAgent != "" {
+		req.Header.Set("User-Agent", j.UserAgent)
+	} else if wp.p.UserAgent != "" {
 		req.Header.Set("User-Agent", wp.p.UserAgent)
 	}
 

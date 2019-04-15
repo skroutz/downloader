@@ -407,6 +407,8 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			if err != nil {
 				return j, fmt.Errorf("Could not decode struct from map: %v", err)
 			}
+		case "UserAgent":
+			j.UserAgent = v
 		default:
 			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
 		}

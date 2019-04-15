@@ -52,6 +52,54 @@ func TestPerformUserAgent(t *testing.T) {
 	wg.Wait()
 }
 
+func TestPerformJobUserAgent(t *testing.T) {
+	var wg sync.WaitGroup
+
+	//Since we are messing with the default settings, we create a new processor here
+	p, err := New(store, 1, storageDir, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p.UserAgent = "Downloader Processor UserAgent"
+	a, err := job.NewAggregation("FooBar", 1, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	wp, err := p.newWorkerPool(*a)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	j := job.Job{ID: "TestUserAgent",
+		URL:         strings.Join([]string{server.URL, t.Name()}, "/"),
+		AggrID:      a.ID,
+		CallbackURL: "http://example.com",
+		UserAgent:   "Downloader Test"}
+
+	var ua = make(chan string)
+
+	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
+		_, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		ua <- r.Header.Get("User-Agent")
+	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		wp.download(context.TODO(), &j, nil)
+	}()
+
+	actual := <-ua
+	if actual != j.UserAgent {
+		t.Fatalf("Expected User-Agent to be %s, got %s", j.UserAgent, actual)
+	}
+	wg.Wait()
+}
+
 func TestProxy(t *testing.T) {
 	var wg sync.WaitGroup
 	//Since we are messing with the default settings, we create a new processor here

@@ -55,6 +55,7 @@ Parameters:
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
  * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
+ * `user_agent`: ( optional ) string, User-Agent request header per Job.
 
 Output: JSON document containing the download's id e.g, `{"id":"NSb4FOAs9fVaQw"}`
 
