@@ -12,6 +12,7 @@ Breaking changes are prefixed with a "[BREAKING]" label.
 
 ### Added
 
+- Notifier metrics are now displayed in the web view. [[#11](https://github.com/skroutz/downloader/issues/11)]
 - Support pluggable notification backends. [[#5](https://github.com/skroutz/downloader/pull/5)]
 - Add a Kafka notification backend implementation. librdkafka is now required
   to compile downloader. It is also a runtime requirement if the Kafka backend
