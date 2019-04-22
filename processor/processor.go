@@ -40,6 +40,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -60,28 +61,6 @@ var (
 	// RetryBackoffDuration indicates the time to wait between retries.
 	RetryBackoffDuration = 2 * time.Minute
 	newChecker           = diskcheck.New
-
-	// Based on http.DefaultTransport
-	//
-	// See https://golang.org/pkg/net/http/#RoundTripper
-	httpTransport = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second, // was 30 * time.Second
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   4 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		// Bypass tls errors with a few upstream servers (local error: tls: no renegotiation)
-		// We will allow a single server-initiated renegotiation attempt
-		// See:
-		// https://golang.org/pkg/crypto/tls/#RenegotiationSupport
-		// https://github.com/golang/go/issues/5742
-		TLSClientConfig: &tls.Config{Renegotiation: tls.RenegotiateOnceAsClient},
-	}
 )
 
 // TODO: these should all be configuration options provided by the caller
@@ -101,6 +80,7 @@ const (
 	statsResponseCodePrefix        = "download.response."        //Counter
 	statsReaperFailures            = "reaperFailures"            //Counter
 	statsReaperSuccessfulDeletions = "reaperSuccessfulDeletions" //Counter
+	statsInvalidProxies            = "invalidProxies"            //Counter
 
 	// diskChecker settings
 	diskHigh     = 95
@@ -146,6 +126,7 @@ type workerPool struct {
 	p                *Processor
 	numActiveWorkers int32
 	log              *log.Logger
+	client           *http.Client
 
 	// jobChan is the channel that distributes jobs to the respective
 	// workers
@@ -186,17 +167,11 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, logger *
 		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
 	}
 
-	client := &http.Client{
-		Transport: httpTransport,
-		Timeout:   10 * time.Second, // Larger than Dial + TLS timeout
-	}
-
 	return Processor{
 		Storage:      storage,
 		StorageDir:   storageDir,
 		ScanInterval: scanInterval,
 		StatsIntvl:   5 * time.Second,
-		Client:       client,
 		Log:          logger,
 		pools:        make(map[string]*workerPool),
 		stats:        stats.New("Processor", time.Second, func(m *expvar.Map) {}),
@@ -324,7 +299,12 @@ POOLS_LOOP:
 							p.Log.Printf("Using aggregation with id '%s', and limit: %d",
 								aggr.ID, aggr.Limit)
 						}
-						wp := p.newWorkerPool(aggr)
+						wp, err := p.newWorkerPool(*aggr)
+						if err != nil {
+							p.Log.Printf("Error fetching aggregation with proxy '%s': %s", aggrID, err)
+							p.stats.Add(statsInvalidProxies, 1)
+							continue
+						}
 						p.pools[aggrID] = &wp
 
 						//Report Metrics
@@ -419,15 +399,20 @@ func (p *Processor) collectRogueDownloads() {
 }
 
 // newWorkerPool initializes and returns a WorkerPool for aggr.
-func (p *Processor) newWorkerPool(aggr job.Aggregation) workerPool {
+func (p *Processor) newWorkerPool(aggr job.Aggregation) (workerPool, error) {
 	logPrefix := fmt.Sprintf("%s[worker pool:%s] ", p.Log.Prefix(), aggr.ID)
 
+	client, err := getClient(aggr.Proxy)
+	if err != nil {
+		return workerPool{}, err
+	}
 	return workerPool{
 		aggr:    aggr,
 		jobChan: make(chan job.Job),
 		p:       p,
 		log:     log.New(os.Stderr, logPrefix, log.Ldate|log.Ltime),
-	}
+		client:  client,
+	}, nil
 }
 
 // increaseWorkers atomically increases the activeWorkers counter of wp by 1
@@ -572,11 +557,23 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		// This actually indicates a malformed url
 		return derrors.E("creating request", err)
 	}
-	if wp.p.UserAgent != "" {
+
+	if j.UserAgent != "" {
+		req.Header.Set("User-Agent", j.UserAgent)
+	} else if wp.p.UserAgent != "" {
 		req.Header.Set("User-Agent", wp.p.UserAgent)
 	}
 
-	resp, err := wp.p.Client.Do(req.WithContext(ctx))
+	// DownloadTimeout might be different than zero in case Job has been initalized
+	// with custom valid timeout, so this timeout will be used intead of the default.
+	if j.DownloadTimeout > 0 {
+		var cancel context.CancelFunc
+		timeout := time.Duration(j.DownloadTimeout)
+		ctx, cancel = context.WithTimeout(ctx, timeout*time.Second)
+		defer cancel()
+	}
+
+	resp, err := wp.client.Do(req.WithContext(ctx))
 	if err != nil {
 		if strings.Contains(err.Error(), "x509") || strings.Contains(err.Error(), "tls") {
 			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "tls"), 1)
@@ -761,4 +758,45 @@ func (p *Processor) reaper(ctx context.Context) {
 			p.stats.Add(statsReaperSuccessfulDeletions, 1)
 		}
 	}
+}
+
+func httpTransport(proxy *url.URL) *http.Transport {
+	proxyfunc := http.ProxyFromEnvironment
+	if proxy != nil {
+		proxyfunc = http.ProxyURL(proxy)
+	}
+
+	return &http.Transport{
+		Proxy: proxyfunc,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second, // was 30 * time.Second
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   4 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		// Bypass tls errors with a few upstream servers (local error: tls: no renegotiation)
+		// We will allow a single server-initiated renegotiation attempt
+		// See:
+		// https://golang.org/pkg/crypto/tls/#RenegotiationSupport
+		// https://github.com/golang/go/issues/5742
+		TLSClientConfig: &tls.Config{Renegotiation: tls.RenegotiateOnceAsClient},
+	}
+}
+
+func getClient(proxy string) (*http.Client, error) {
+	var proxyURL *url.URL
+	var err error
+	if proxy != "" {
+		proxyURL, err = url.ParseRequestURI(proxy)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &http.Client{
+		Transport: httpTransport(proxyURL),
+	}, nil
 }

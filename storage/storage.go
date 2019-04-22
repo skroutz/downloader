@@ -146,7 +146,7 @@ func New(r *redis.Client) (*Storage, error) {
 //
 // TODO: should we check that the corresponding aggregation exists in redis?
 func (s *Storage) SaveJob(j *job.Job) error {
-	m, err := jobToMap(j)
+	m, err := structToMap(j)
 	if err != nil {
 		return err
 	}
@@ -259,27 +259,31 @@ func (s *Storage) PopRip() (job.Job, error) {
 // GetAggregation fetches from Redis the aggregation denoted by id.
 // In the case of ErrNotFound, the returned aggregation has valid ID and the
 // default limit.
-func (s *Storage) GetAggregation(id string) (job.Aggregation, error) {
-	val, err := s.Redis.HGet(AggrKeyPrefix+id, "Limit").Result()
-	if err == redis.Nil {
-		return job.Aggregation{ID: id, Limit: aggrDefaultLimit}, ErrNotFound
-	}
-
+func (s *Storage) GetAggregation(id string) (*job.Aggregation, error) {
+	val, err := s.Redis.HGetAll(AggrKeyPrefix + id).Result()
 	if err != nil {
-		return job.Aggregation{}, err
+		return nil, err
 	}
 
-	limit, err := strconv.Atoi(val)
-	if err != nil {
-		return job.Aggregation{}, err
+	if v, ok := val["ID"]; !ok || v == "" {
+		aggr, err := job.NewAggregation(id, aggrDefaultLimit, "")
+		if err != nil {
+			return nil, err
+		}
+		return aggr, ErrNotFound
 	}
 
-	return job.Aggregation{ID: id, Limit: limit}, nil
+	aggr, err := AggregationFromMap(val)
+	return &aggr, err
 }
 
 // SaveAggregation updates/creates the current aggregation in redis.
 func (s *Storage) SaveAggregation(a *job.Aggregation) error {
-	return s.Redis.HSet(AggrKeyPrefix+a.ID, "Limit", a.Limit).Err()
+	m, err := structToMap(a)
+	if err != nil {
+		return err
+	}
+	return s.Redis.HMSet(AggrKeyPrefix+a.ID, m).Err()
 }
 
 // RemoveAggregation deletes the aggregation key from Redis
@@ -289,6 +293,27 @@ func (s *Storage) RemoveAggregation(id string) error {
 		return fmt.Errorf("Could not delaggr: %s", err)
 	}
 	return nil
+}
+
+func AggregationFromMap(m map[string]string) (job.Aggregation, error) {
+	var err error
+	aggr := job.Aggregation{}
+	for k, v := range m {
+		switch k {
+		case "ID":
+			aggr.ID = v
+		case "Limit":
+			aggr.Limit, err = strconv.Atoi(v)
+			if err != nil {
+				return aggr, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "Proxy":
+			aggr.Proxy = v
+		default:
+			return aggr, fmt.Errorf("Field %s with value %s was not found in Aggregarion struct", k, v)
+		}
+	}
+	return aggr, nil
 }
 
 // RetryCallback resets a job's callback state and injects it back to the
@@ -308,17 +333,17 @@ func (s *Storage) RetryCallback(j *job.Job) error {
 	return s.QueuePendingCallback(j, 0)
 }
 
-func jobToMap(j *job.Job) (map[string]interface{}, error) {
+func structToMap(str interface{}) (map[string]interface{}, error) {
 	out := make(map[string]interface{})
 
-	v := reflect.ValueOf(j)
+	v := reflect.ValueOf(str)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
 
 	// we only accept structs
 	if v.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("jobToMap only accepts structs; got %T", v)
+		return nil, fmt.Errorf("structToMap only accepts structs; got %T", v)
 	}
 
 	typ := v.Type()
@@ -377,6 +402,13 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			}
 		case "MimeType":
 			j.MimeType = v
+		case "DownloadTimeout":
+			j.DownloadTimeout, err = strconv.Atoi(v)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
+		case "UserAgent":
+			j.UserAgent = v
 		default:
 			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
 		}
