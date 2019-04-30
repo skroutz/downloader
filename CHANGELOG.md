@@ -4,6 +4,13 @@ Breaking changes are prefixed with a "[BREAKING]" label.
 
 ## master (unreleased)
 
+
+
+## 0.1.0 (2019-04-30)
+
+This is a backwards-incompatible release with a bunch of new features (most
+notably, a Kafka notification adapter).
+
 ### Changed
 
 - [BREAKING] Downloaded files will now be deleted from the disk after 3 hours
@@ -25,6 +32,8 @@ Breaking changes are prefixed with a "[BREAKING]" label.
 - Add a Kafka notification backend implementation. librdkafka is now required
   to compile downloader. It is also a runtime requirement if the Kafka backend
   is enabled. [[#5](https://github.com/skroutz/downloader/pull/5)]
+
+
 
 ## 0.0.1 (2019-04-08)
 
