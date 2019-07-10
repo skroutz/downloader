@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -14,90 +15,138 @@ import (
 	"github.com/skroutz/downloader/processor/mimetype"
 )
 
-func TestPerformUserAgent(t *testing.T) {
-	var wg sync.WaitGroup
-
-	//Since we are messing with the default settings, we create a new processor here
-	p, err := New(store, 1, storageDir, logger)
+func TestPerformWithDefaultRequestHeaders(t *testing.T) {
+	processor, err := New(store, 1, storageDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.UserAgent = "Downloader Test"
-	wp, err := p.newWorkerPool(*defaultAggr)
+
+	// Emulate default values as if they would be read
+	// from a configuration file
+	processor.RequestHeaders = map[string]string{
+		"User-Agent":      "Downloader-Agent",
+		"Accept":          "*/*",
+		"Accept-Encoding": "gzip,deflate,br",
+	}
+
+	aggregation, err := job.NewAggregation("FooBarBaz", 1, "")
 	if err != nil {
 		log.Fatal(err)
 	}
+	wp, err := processor.newWorkerPool(*aggregation)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	j := getTestJob(t)
-	var ua = make(chan string)
+	job := getTestJob(t)
+	job.RequestHeaders = map[string]string{}
+	job.AggrID = aggregation.ID
+
+	var rh = make(chan map[string]string)
 
 	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
 		_, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Fatal(err)
 		}
-		ua <- r.Header.Get("User-Agent")
+
+		sniffedHeaders := make(map[string]string)
+		for k, values := range r.Header {
+			// Loop over all values for the key.
+			// We only have one value. This is a loop
+			// because the internal implementation of
+			// Header associates a key with a list of values.
+			for _, value := range values {
+				sniffedHeaders[k] = value
+			}
+		}
+
+		rh <- sniffedHeaders
 	})
 
-	wg.Add(1)
+	waitGroup := new(sync.WaitGroup)
+
+	waitGroup.Add(1)
 	go func() {
-		defer wg.Done()
-		wp.download(context.TODO(), &j, nil)
+		defer waitGroup.Done()
+		wp.download(context.TODO(), &job, nil)
 	}()
 
-	actual := <-ua
-	if actual != p.UserAgent {
-		t.Fatalf("Expected User-Agent to be %s, got %s", p.UserAgent, actual)
+	actualHeaders := <-rh
+	// Ensure our goroutine exits before the end
+	// because in case of fatalf the goroutine might stay hanged
+	waitGroup.Wait()
+
+	if !reflect.DeepEqual(actualHeaders, processor.RequestHeaders) {
+		t.Fatalf("Expected request headers to be %#v instead got %#v",
+			processor.RequestHeaders, actualHeaders)
 	}
-	wg.Wait()
 }
 
-func TestPerformJobUserAgent(t *testing.T) {
-	var wg sync.WaitGroup
-
-	//Since we are messing with the default settings, we create a new processor here
-	p, err := New(store, 1, storageDir, logger)
+func TestPerformWithJobRequestHeaders(t *testing.T) {
+	processor, err := New(store, 1, storageDir, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	p.UserAgent = "Downloader Processor UserAgent"
-	a, err := job.NewAggregation("FooBar", 1, "")
+	processor.RequestHeaders = map[string]string{
+		"User-Agent": "Downloader-Agent",
+		"Accept":     "*/*",
+	}
+
+	aggregation, err := job.NewAggregation("FooBarBaz", 1, "")
 	if err != nil {
 		log.Fatal(err)
 	}
-	wp, err := p.newWorkerPool(*a)
+	wp, err := processor.newWorkerPool(*aggregation)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	j := job.Job{ID: "TestUserAgent",
-		URL:         strings.Join([]string{server.URL, t.Name()}, "/"),
-		AggrID:      a.ID,
-		CallbackURL: "http://example.com",
-		UserAgent:   "Downloader Test"}
+	expectedHeaders := map[string]string{
+		"Accept":          "application/html,application/xhtml;q=0.8,*/*",
+		"Accept-Encoding": "gzip,deflate,br",
+		"User-Agent":      "DL-Agent v1.0",
+	}
 
-	var ua = make(chan string)
+	job := getTestJob(t)
+	job.RequestHeaders = expectedHeaders
+	job.AggrID = aggregation.ID
+
+	var rh = make(chan map[string]string)
 
 	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
 		_, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Fatal(err)
 		}
-		ua <- r.Header.Get("User-Agent")
+
+		sniffedHeaders := make(map[string]string)
+		for k, values := range r.Header {
+			for _, value := range values {
+				sniffedHeaders[k] = value
+			}
+		}
+
+		rh <- sniffedHeaders
 	})
 
-	wg.Add(1)
+	waitGroup := new(sync.WaitGroup)
+
+	waitGroup.Add(1)
 	go func() {
-		defer wg.Done()
-		wp.download(context.TODO(), &j, nil)
+		defer waitGroup.Done()
+		wp.download(context.TODO(), &job, nil)
 	}()
 
-	actual := <-ua
-	if actual != j.UserAgent {
-		t.Fatalf("Expected User-Agent to be %s, got %s", j.UserAgent, actual)
+	actualHeaders := <-rh
+
+	waitGroup.Wait()
+
+	if !reflect.DeepEqual(actualHeaders, expectedHeaders) {
+		t.Fatalf("Expected request headers to be %#v instead got %#v",
+			expectedHeaders, actualHeaders)
 	}
-	wg.Wait()
 }
 
 func TestProxy(t *testing.T) {

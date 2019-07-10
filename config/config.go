@@ -16,9 +16,9 @@ type Config struct {
 	} `json:"api"`
 
 	Processor struct {
-		StorageDir    string `json:"storage_dir"`
-		UserAgent     string `json:"user_agent"`
-		StatsInterval int    `json:"stats_interval"`
+		StorageDir     string            `json:"storage_dir"`
+		RequestHeaders map[string]string `json:"request_headers"`
+		StatsInterval  int               `json:"stats_interval"`
 	} `json:"processor"`
 
 	Notifier struct {

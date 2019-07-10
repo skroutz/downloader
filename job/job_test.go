@@ -34,12 +34,15 @@ func TestUnmarshalJSON(t *testing.T) {
 		`{"aggr_id":"timeoutfoo", "download_timeout":-2, "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:   true,
 		`{"aggr_id":"timeoutfoo", "download_timeout":"4", "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:  true,
 
-		// user agent
-		`{"aggr_id":"useragentfoo", "user_agent":"Downloader Test", "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`: false,
-		`{"aggr_id":"useragentfoo", "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:                                 false,
-		`{"aggr_id":"useragentfoo", "user_agent":"", "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:                false,
-		`{"aggr_id":"useragentfoo", "user_agent":null, "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:              true,
-		`{"aggr_id":"useragentfoo", "user_agent":3, "url":"http://foobar.com","callback_url":"http://foo.bar","extra":"whatever"}`:                 true,
+		// request headers
+		`{"aggr_id":"requestheadersfoo", "url":"http://foobar.com", "callback_url":"http://foo.bar",
+		"extra": "whatever", "request_headers": {"User-Agent":"Test-Agent"}}`: false,
+		`{"aggr_id":"requestheadersfoo", "url":"http://foobar.com",
+		"callback_url":"http://foo.bar", "extra": "whatever",
+		"request_headers": {"Accept-Encoding":"gzip","User-Agent":"Test-Agent"}}`: false,
+		`{"aggr_id":"requestheadersfoo", "user_agent":"Test-Agent",
+		"url":"http://foobar.com", "callback_url":"http://foo.bar",
+		"extra": "whatever", "request_headers": 1}`: true,
 	}
 
 	for data, expectErr := range tc {

@@ -104,8 +104,9 @@ type Processor struct {
 	// The client that will be used for the download requests
 	Client *http.Client
 
-	// The User-Agent to set in download requests
-	UserAgent string
+	// The default request headers that will be used for file
+	// downloads in case a job does not specify any request headers.
+	RequestHeaders map[string]string
 
 	Log *log.Logger
 
@@ -558,10 +559,12 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		return derrors.E("creating request", err)
 	}
 
-	if j.UserAgent != "" {
-		req.Header.Set("User-Agent", j.UserAgent)
-	} else if wp.p.UserAgent != "" {
-		req.Header.Set("User-Agent", wp.p.UserAgent)
+	for k, v := range wp.p.RequestHeaders {
+		req.Header.Set(k, v)
+	}
+
+	for k, v := range j.RequestHeaders {
+		req.Header.Set(k, v)
 	}
 
 	// DownloadTimeout might be different than zero in case Job has been initalized

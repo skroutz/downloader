@@ -55,7 +55,7 @@ Parameters:
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
  * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
- * `user_agent`: ( optional ) string, User-Agent request header per Job.
+ * `request_headers`: ( optional ) object{string => string}, HTTP Request Headers per job.
 
 Output: JSON document containing the download's id e.g, `{"id":"NSb4FOAs9fVaQw"}`
 
@@ -88,14 +88,14 @@ Below you can find examples of jobs enqueueing and callbacks payloads
 #### Example using `http` as backend
 
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_type": "http", "callback_dst":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*"}' https://downloader.example.com/download
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_type": "http", "callback_dst":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' https://downloader.example.com/download
 # => {"id":"NSb4FOAs9fVaQw"}
 ```
 
 #### Example using `kafka` as backend
 Suppose you have already configured a kafka cluster and created a topic `dwl_images`.
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*"}' http://localhost:8000/download
+$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://localhost:8000/download
 # => {"id":"Hl2VErjyL5UK9A"}
 ```
 

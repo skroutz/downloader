@@ -2,6 +2,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -350,8 +351,20 @@ func structToMap(str interface{}) (map[string]interface{}, error) {
 	for i := 0; i < v.NumField(); i++ {
 		// gets us a StructField
 		fi := typ.Field(i)
-		// set key of map to value in struct field
-		out[fi.Name] = v.Field(i).Interface()
+
+		// Redis only accepts stringified payloads, so maps/objects need to
+		// be stringified prior to storing them in redis.
+		if fi.Type.Kind() == reflect.Map {
+			mapData := v.Field(i).Interface()
+			bytes, err := json.Marshal(mapData)
+			if err != nil {
+				return nil, err
+			}
+			out[fi.Name] = string(bytes)
+		} else {
+			// set key of map to value in struct field
+			out[fi.Name] = v.Field(i).Interface()
+		}
 	}
 	return out, nil
 }
@@ -407,8 +420,14 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			if err != nil {
 				return j, fmt.Errorf("Could not decode struct from map: %v", err)
 			}
-		case "UserAgent":
-			j.UserAgent = v
+		case "RequestHeaders":
+			headers := make(map[string]string)
+			err := json.Unmarshal([]byte(v), &headers)
+			if err != nil {
+				return j, fmt.Errorf("Could not decode request headers: %v", err)
+			}
+			j.RequestHeaders = headers
+
 		default:
 			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
 		}

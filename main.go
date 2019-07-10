@@ -141,7 +141,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				processor.UserAgent = cfg.Processor.UserAgent
+				processor.RequestHeaders = cfg.Processor.RequestHeaders
 
 				if cfg.Processor.StatsInterval > 0 {
 					processor.StatsIntvl = time.Duration(cfg.Processor.StatsInterval) * time.Millisecond

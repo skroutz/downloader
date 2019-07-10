@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/skroutz/downloader/processor/mimetype"
@@ -77,8 +78,10 @@ type Job struct {
 	// Http client timeout for download in seconds
 	DownloadTimeout int `json:"download_timeout"`
 
-	// The User-Agent to set in download requests
-	UserAgent string `json:"user_agent"`
+	// The HTTP request headers provided by the user will be used for
+	// downloading files.
+	// This attribute is optional.
+	RequestHeaders map[string]string `json:"request_headers,omitempty"`
 }
 
 // MarshalBinary is used by redis driver to marshall custom type State
@@ -190,14 +193,31 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 	}
 	j.DownloadTimeout = timeout
 
-	var useragent string
-	if useragentField, ok := tmp["user_agent"]; ok {
-		useragent, ok = useragentField.(string)
-		if !ok {
-			return errors.New("UserAgent must be a string")
+	rh, ok := tmp["request_headers"]
+	if ok {
+		if requestHeaders, ok := rh.(map[string]interface{}); ok {
+			headers := make(map[string]string)
+			for k, v := range requestHeaders {
+				switch v.(type) {
+				case string:
+					headers[k] = v.(string)
+				case int:
+					headers[k] = strconv.Itoa(v.(int))
+				default:
+					// According to https://tools.ietf.org/html/rfc2616#section-5.3
+					// all request headers can be represented as either integers
+					// or strings. For that reason, we handle these. But in case,
+					// a value is not of one of these types we raise an error.
+					return fmt.Errorf(
+						"Values of request headers keys must be either strings or ints."+
+							"Given value is %s", v)
+				}
+			}
+			j.RequestHeaders = headers
+		} else {
+			return errors.New("request_headers must be a dictionary")
 		}
 	}
-	j.UserAgent = useragent
 
 	return nil
 }
@@ -231,6 +251,7 @@ func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
 
 func (j Job) String() string {
 	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, callback_url:%s, "+
-		"callback_type:%s, callback_dst:%s, Timeout:%d, UserAgent:%s}",
-		j.ID, j.AggrID, j.URL, j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout, j.UserAgent)
+		"callback_type:%s, callback_dst:%s, Timeout:%d, RequestHeaders:%v}",
+		j.ID, j.AggrID, j.URL, j.CallbackURL, j.CallbackType, j.CallbackDst,
+		j.DownloadTimeout, j.RequestHeaders)
 }

@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"log"
+	"reflect"
 	"testing"
 
 	"github.com/go-redis/redis"
@@ -51,7 +52,8 @@ func TestSaveJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if testJob != job {
+	equalJobs := reflect.DeepEqual(testJob, job)
+	if !equalJobs {
 		t.Error("Jobs do not match!")
 	}
 }
