@@ -5,6 +5,9 @@ Breaking changes are prefixed with a "[BREAKING]" label.
 ## master (unreleased)
 
 
+## 0.1.1 (2019-07-10)
+
+Add support for custom request headers.
 
 ## 0.1.0 (2019-04-30)
 
