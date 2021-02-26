@@ -6,7 +6,6 @@
 #
 #   make             - format and compile the entire program along with its dependencies
 #   make fmt         - run gofmt to report any code formatting errors
-#   make deps        - verify consistency of `vendor/` directory contents
 #   make build       - compile the program but not install the results
 #   make check       - run the package's test suite
 #   make install     - compile the program and create the executables
@@ -17,7 +16,7 @@
 
 #
 
-.PHONY: install fmt deps build check install clean distclean lint vet
+.PHONY: install fmt build check install clean distclean lint vet
 
 all: fmt build
 
@@ -27,10 +26,7 @@ fmt:
 		false; \
 	fi
 
-deps:
-	dep ensure -v
-
-build: deps
+build:
 	go build
 
 check: build
