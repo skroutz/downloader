@@ -57,3 +57,14 @@ func TestUnmarshalJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestJobToString(t *testing.T) {
+	testJob := Job{}
+	res := testJob.String()
+	expected := "Job{ID:, Aggr:, URL:, ExtractImageSize:false, ImageSize: , "+
+		"callback_url:, callback_type:, callback_dst:, Timeout:0, RequestHeaders:map[]}"
+
+	if res != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, res)
+	}
+}

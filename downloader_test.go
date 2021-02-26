@@ -219,6 +219,9 @@ func TestResourceExists(t *testing.T) {
 		if ci.ResponseCode != 200 {
 			t.Fatalf("Expected ResponseCode to be set: %#v", ci)
 		}
+		if ci.ImageSize != "" {
+			t.Fatalf("Expected to not trigger image-size extraction, got: '%s'", ci.ImageSize)
+		}
 	}
 
 	// Test job processing (Processor)
@@ -360,6 +363,61 @@ func TestMimeTypeMismatch(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractImageSize(t *testing.T) {
+	type test struct {
+		file_in             string
+		mime_type_in        string
+		expected_image_size string
+	}
+
+	tests := []test{
+		{"tiny.png", "", "10x10"},
+		{"tiny.pdf", "", ""},
+		{"tiny.bmp", "", ""},
+		{"tiny.pdf", "application/pdf", ""},
+	}
+
+	var ci job.Callback
+	for _, tc := range tests {
+		job := testJob{
+			"aggr_id":            "foobar",
+			"aggr_limit":         1,
+			"url":                downloadURL(tc.file_in),
+			"callback_url":       callbackURL(),
+			"mime_type":          tc.mime_type_in,
+			"extract_image_size": true,
+		}
+
+		err := postJob(job)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		select {
+		case <-time.After(timeout):
+			t.Fatal("Callback request receive timeout")
+		case cb := <-callbacks:
+			err := json.Unmarshal(cb, &ci)
+			if err != nil {
+				t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+			}
+
+			if !ci.Success {
+				t.Fatal("Expected Success to be true")
+			}
+
+			if len(tc.expected_image_size) == 0 && ci.ImageSize != "" {
+				t.Fatalf("Expected no ImageSize, got: '%s'", ci.ImageSize)
+			}
+
+			if len(tc.expected_image_size) > 0 && !strings.Contains(ci.ImageSize, tc.expected_image_size) {
+				t.Fatalf("Expected an ImageSize of '%s', got: '%s'", tc.expected_image_size, ci.ImageSize)
+			}
+		}
+	}
+}
+
 
 // test a download URL that will fail the first 2 times but succeeds the 3rd
 func TestTransientDownstreamError(t *testing.T) {

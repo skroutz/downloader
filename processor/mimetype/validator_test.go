@@ -28,8 +28,13 @@ func TestWhitelist(t *testing.T) {
 	}
 	defer in.Close()
 
-	if err = validator.Read(in); err != nil {
+	var mime string
+	if mime, err = validator.Read(in); err != nil {
 		t.Fatal(err)
+	}
+
+	if mime != "image/jpeg" {
+		t.Fatalf("Expected an 'image/jpeg' mime-type, got '%s'", mime)
 	}
 }
 
@@ -42,8 +47,12 @@ func TestBlacklistOnly(t *testing.T) {
 	}
 	defer in.Close()
 
-	if err = validator.Read(in); err != nil {
+	var mime string
+	if mime, err = validator.Read(in); err != nil {
 		t.Fatal(err)
+	}
+	if mime != "image/jpeg" {
+		t.Fatalf("Expected an 'image/jpeg' mime-type, got '%s'", mime)
 	}
 }
 
@@ -57,7 +66,7 @@ func TestMultipleWrites(t *testing.T) {
 	defer in.Close()
 	testReader := iotest.OneByteReader(in)
 
-	if err = validator.Read(testReader); err != nil {
+	if _, err = validator.Read(testReader); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -73,7 +82,7 @@ func TestImageSmallerThanThreshold(t *testing.T) {
 	defer in.Close()
 
 	// We should get an error
-	if err = validator.Read(in); err == nil {
+	if _, err = validator.Read(in); err == nil {
 		t.Fatal(err)
 	}
 }
@@ -88,7 +97,7 @@ func TestUnexpectedEOF(t *testing.T) {
 	validator.Reset("image/png")
 
 	var in unexpectedReader
-	err := validator.Read(in)
+	_, err := validator.Read(in)
 	if err == nil {
 		t.Fatal("error expected")
 	}

@@ -57,6 +57,7 @@ Parameters:
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
  * `max_retries`: ( optional ) int, Maximum download retries when retryiable errors are encountered.
+ * `extract_image_size`: ( optional ) boolean, Compute image size on supported mime-types (jpeg, png, gif). For unsupported mime-types this is ignored.
  * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
  * `request_headers`: ( optional ) object{string => string}, HTTP Request Headers per job.
 
@@ -117,7 +118,8 @@ Example Callback payloads:
    "job_id":"6QEywYsd0jrKAg",
    "response_code":200,
    "delivered":true,
-   "delivery_error":""
+   "delivery_error":"",
+   "image_size": "10x10"
 }
 ```
 
