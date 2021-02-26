@@ -419,6 +419,10 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			if err := j.MaxRetries.UnmarshalBinary([]byte(v)); err != nil {
 				return j, fmt.Errorf("Could not decode struct from map: %v", err)
 			}
+		case "ExtractImageSize": // Match "1" to true
+			j.ExtractImageSize = v == "1"
+		case "ImageSize":
+			j.ImageSize = v
 		case "DownloadTimeout":
 			j.DownloadTimeout, err = strconv.Atoi(v)
 			if err != nil {

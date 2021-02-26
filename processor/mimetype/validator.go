@@ -98,17 +98,19 @@ func (v *Validator) Reset(expectedMimePattern string) {
 // Read takes an io.Reader as an argument, tries to read MimeTypeValidationThreshold of input
 // bytes, or fewer if the request is shorter. It then performs mime type checks against its buffer.
 // Any r.Read() errors are returned verbatim.
-func (v *Validator) Read(r io.Reader) error {
+// Returns the mime-type or empty string on error.
+func (v *Validator) Read(r io.Reader) (string, error) {
 	_, err := v.buffer.ReadFrom(io.LimitReader(r, BytesThreshold))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	return v.CheckBuffer(v.buffer.Bytes())
 }
 
 // CheckBuffer performs mime types checks against the provided byte slice.
-func (v *Validator) CheckBuffer(p []byte) error {
+// Returns the mime-type or empty string on error.
+func (v *Validator) CheckBuffer(p []byte) (string, error) {
 	var mime string
 	var err error
 	// decoder.TypeByBuffer() panics with empty slices. We guard against
@@ -117,7 +119,7 @@ func (v *Validator) CheckBuffer(p []byte) error {
 	if len(p) > 0 {
 		mime, err = v.decoder.TypeByBuffer(p)
 		if err != nil {
-			return err
+			return mime, err
 		}
 	} else {
 		mime = "application/x-empty"
@@ -125,11 +127,11 @@ func (v *Validator) CheckBuffer(p []byte) error {
 
 	for _, check := range v.checks {
 		if !check.IsValid(mime) {
-			return ErrMimeTypeMismatch{check, mime}
+			return mime, ErrMimeTypeMismatch{check, mime}
 		}
 	}
 
-	return nil
+	return mime, nil
 }
 
 // Close closes the internal mime-type decoder.

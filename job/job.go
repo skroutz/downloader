@@ -79,6 +79,12 @@ type Job struct {
 	// Mime type pattern provided by the client
 	MimeType string `json:"mime_type"`
 
+	// Compute image size on supported mime-types
+	ExtractImageSize bool `json:"extract_image_size"`
+
+	// ImageSize of the downloaded image
+	ImageSize string `json:"image_size"`
+
 	// Http client timeout for download in seconds
 	DownloadTimeout int `json:"download_timeout"`
 
@@ -197,6 +203,21 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 		j.MaxRetries.Set(retries)
 	}
 
+	is, ok := tmp["extract_image_size"]
+	// Default extract_image_size is false
+	if ok {
+		// Since image_size is optional, if it is not in the json doc
+		// set it to the default ""
+		if extractImageSize, ok := is.(bool); ok {
+			j.ExtractImageSize = extractImageSize
+		} else {
+			err = errors.New("ExtractImageSize must be a boolean")
+		}
+		if err != nil {
+			return err
+		}
+	}
+
 	var timeout int
 	if timeoutS, ok := tmp["download_timeout"]; ok {
 		timeoutf, ok := timeoutS.(float64) // The attribute is given, validate it.
@@ -262,13 +283,16 @@ func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
 		DownloadURL:  dwURL,
 		JobID:        j.ID,
 		ResponseCode: j.ResponseCode,
+		ImageSize:    j.ImageSize,
 		Delivered:    true,
 	}, nil
 }
 
 func (j Job) String() string {
-	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, callback_url:%s, "+
-		"callback_type:%s, callback_dst:%s, Timeout:%d, RequestHeaders:%v}",
-		j.ID, j.AggrID, j.URL, j.CallbackURL, j.CallbackType, j.CallbackDst,
-		j.DownloadTimeout, j.RequestHeaders)
+	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, "+
+		"ExtractImageSize:%t, ImageSize: %s, "+
+		"callback_url:%s, callback_type:%s, callback_dst:%s, Timeout:%d, RequestHeaders:%v}",
+		j.ID, j.AggrID, j.URL,
+		j.ExtractImageSize, j.ImageSize,
+		j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout, j.RequestHeaders)
 }

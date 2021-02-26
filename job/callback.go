@@ -15,6 +15,9 @@ type Callback struct {
 	// Extra are opaque/pass through data
 	Extra string `json:"extra"`
 
+	// ImageSize if supported
+	ImageSize string `json:"image_size"`
+
 	// ResourceURL is the url of the requested for download resource
 	ResourceURL string `json:"resource_url"`
 
