@@ -35,6 +35,13 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
+	"image"
+
+	// Register file-types for image size extraction
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+
 	"io"
 	"io/ioutil"
 	"log"
@@ -59,9 +66,17 @@ import (
 
 var (
 	// RetryBackoffDuration indicates the time to wait between retries.
-	RetryBackoffDuration = 2 * time.Minute
-	newChecker           = diskcheck.New
+	RetryBackoffDuration        = 2 * time.Minute
+	newChecker                  = diskcheck.New
+	supportedImageSizeMimeTypes = make(map[string]bool)
 )
+
+func init() {
+	// Set up supported image size mime-types
+	supportedImageSizeMimeTypes["image/jpeg"] = true
+	supportedImageSizeMimeTypes["image/png"] = true
+	supportedImageSizeMimeTypes["image/gif"] = true
+}
 
 // TODO: these should all be configuration options provided by the caller
 const (
@@ -601,13 +616,19 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 	}
 	defer out.Close()
 
-	if j.MimeType != "" {
+	var mimeType string
+	if j.MimeType != "" || j.ExtractImageSize {
 		if validator == nil {
 			panic("No available mime type validator")
 		}
 
-		validator.Reset(j.MimeType)
-		if err = validator.Read(io.TeeReader(resp.Body, out)); err != nil {
+		if j.MimeType != "" {
+			validator.Reset(j.MimeType)
+		} else { // ExtractImageSize requires mime-type (guard against invalid payloads)
+			validator.Reset("image/*")
+		}
+
+		if mimeType, err = validator.Read(io.TeeReader(resp.Body, out)); err != nil {
 			if _, ok := err.(mimetype.ErrMimeTypeMismatch); ok {
 				wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "mime"), 1)
 				return derrors.E("validating mime type", err)
@@ -615,6 +636,7 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "body"), 1)
 			return derrors.E("downloading file", err).Retriable()
 		}
+
 	}
 
 	if _, err = io.Copy(out, resp.Body); err != nil {
@@ -633,6 +655,22 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 
 	if err = os.Rename(out.Name(), path); err != nil {
 		return derrors.E("moving file to perm location", err).Internal().Retriable()
+	}
+
+	if j.ExtractImageSize && supportedImageSizeMimeType(mimeType) {
+		f, err := os.Open(path)
+		if err != nil {
+			return derrors.E("opening file for image-size extraction", err)
+		}
+		defer f.Close() // Check order
+
+		c, _, err := image.DecodeConfig(f)
+		if err != nil {
+			wp.p.stats.Add(fmt.Sprintf("%s%s", statsResponseCodePrefix, "image-size"), 1)
+			return derrors.E("extracting image-size", err)
+		}
+
+		j.ImageSize = fmt.Sprintf("%dx%d", c.Width, c.Height)
 	}
 
 	return nil
@@ -808,4 +846,10 @@ func getClient(proxy string) (*http.Client, error) {
 	return &http.Client{
 		Transport: httpTransport(proxyURL),
 	}, nil
+}
+
+func supportedImageSizeMimeType(mimeType string) bool {
+	_, ok := supportedImageSizeMimeTypes[mimeType]
+
+	return ok
 }

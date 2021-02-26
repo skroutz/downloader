@@ -219,6 +219,9 @@ func TestResourceExists(t *testing.T) {
 		if ci.ResponseCode != 200 {
 			t.Fatalf("Expected ResponseCode to be set: %#v", ci)
 		}
+		if ci.ImageSize != "" {
+			t.Fatalf("Expected to not trigger image-size extraction, got: '%s'", ci.ImageSize)
+		}
 	}
 
 	// Test job processing (Processor)
@@ -357,6 +360,40 @@ func TestMimeTypeMismatch(t *testing.T) {
 		}
 		if !strings.Contains(ci.Error, "Expected mime-type") {
 			t.Fatalf("Expected Error to contain Expected mime-type': %s", ci.Error)
+		}
+	}
+}
+
+func TestImageSize(t *testing.T) {
+	var ci job.Callback
+
+	resourceURL := downloadURL("tiny.png")
+	job := testJob{
+		"aggr_id":            "foobar",
+		"aggr_limit":         1,
+		"url":                resourceURL,
+		"callback_url":       callbackURL(),
+		"extract_image_size": true,
+	}
+
+	err := postJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-time.After(timeout):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-callbacks:
+		err := json.Unmarshal(cb, &ci)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if !ci.Success {
+			t.Fatal("Expected Success to be true")
+		}
+		if !strings.Contains(ci.ImageSize, "10x10") {
+			t.Fatalf("Expected an ImageSize of 10x10, got: '%s'", ci.ImageSize)
 		}
 	}
 }
