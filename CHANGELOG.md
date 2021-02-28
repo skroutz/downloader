@@ -4,6 +4,7 @@ Breaking changes are prefixed with a "[BREAKING]" label.
 
 ## master (unreleased)
 
+- Add `max-retries` option. [#17](https://github.com/skroutz/downloader/pull/17)
 - Migrate to go modules
 
 ## 0.1.1 (2019-07-10)

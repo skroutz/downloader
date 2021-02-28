@@ -56,6 +56,7 @@ Parameters:
  * `callback_dst`: string, The endpoint on which the job callback request will be performed. Deprecates `callback_url`.
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
+ * `max_retries`: ( optional ) int, Maximum download retries when retryiable errors are encountered.
  * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
  * `request_headers`: ( optional ) object{string => string}, HTTP Request Headers per job.
 

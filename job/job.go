@@ -43,6 +43,10 @@ type Job struct {
 	// NewJob should be a function on Aggregation
 	AggrID string `json:"aggr_id"`
 
+	// MaxRetries specifies the maximum number for retry attempts. It overrides
+	// the default specified in processor.MaxDownloadRetries
+	MaxRetries NullableInt `json:"-"`
+
 	DownloadState State `json:"-"`
 
 	// How many times the download request was attempted
@@ -178,6 +182,19 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	retriesJ, ok := tmp["max_retries"]
+	if ok {
+		retriesf, ok := retriesJ.(float64)
+		if !ok {
+			return fmt.Errorf("Max retries must be a number, was: %T", retriesJ)
+		}
+		retries := int(retriesf)
+		if retries < 0 {
+			return errors.New("Max retries must not be negative")
+		}
+		j.MaxRetries.Set(retries)
 	}
 
 	var timeout int

@@ -415,6 +415,90 @@ func TestTransientDownstreamError(t *testing.T) {
 		}
 	}
 }
+
+func TestNoRetries(t *testing.T) {
+	var ci job.Callback
+
+	resourceURL := downloadURL("tiny.png")
+
+	job := testJob{
+		"aggr_id":      "no-retries",
+		"aggr_limit":   1,
+		"url":          resourceURL,
+		"callback_url": fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath),
+		"max_retries":  0}
+
+	fsChan <- fsResponse{http.StatusInternalServerError, nil} // 1st try
+	// there shoundn't be a 2nd try (we want the processor to stop after the first error)
+
+	err := postJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	// bump timeout cause we also have to wait for the backoffs
+	case <-time.After(timeout + (5 * time.Second)):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-callbacks:
+		err := json.Unmarshal(cb, &ci)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if ci.Success {
+			t.Fatal("Expected Success to be false")
+		}
+		if ci.Error == "" {
+			t.Fatal("Expected Error not to be empty")
+		}
+		if ci.ResponseCode != http.StatusInternalServerError {
+			t.Fatal("Expected an Interal Server Error")
+		}
+	}
+}
+
+func TestOneRetry(t *testing.T) {
+	var ci job.Callback
+
+	resourceURL := downloadURL("tiny.png")
+
+	job := testJob{
+		"aggr_id":      "one-retry",
+		"aggr_limit":   1,
+		"url":          resourceURL,
+		"callback_url": fmt.Sprintf("http://%s:%s%s", csHost, csPort, csPath),
+		"max_retries":  1}
+
+	fsChan <- fsResponse{http.StatusInternalServerError, nil} // 1st try
+	fsChan <- fsResponse{http.StatusInternalServerError, nil} // 2nd try
+	// there shoundn't be a 2nd try (we want the processor to stop after the second error)
+
+	err := postJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	// bump timeout cause we also have to wait for the backoffs
+	case <-time.After(timeout + (5 * time.Second)):
+		t.Fatal("Callback request receive timeout")
+	case cb := <-callbacks:
+		err := json.Unmarshal(cb, &ci)
+		if err != nil {
+			t.Fatalf("Error parsing callback response: %s | %s", err, string(cb))
+		}
+		if ci.Success {
+			t.Fatal("Expected Success to be false")
+		}
+		if ci.Error == "" {
+			t.Fatal("Expected Error not to be empty")
+		}
+		if ci.ResponseCode != http.StatusInternalServerError {
+			t.Fatal("Expected an Interal Server Error")
+		}
+	}
+}
+
 func TestUnexpectedReadError(t *testing.T) {
 	var ci job.Callback
 

@@ -415,6 +415,10 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			}
 		case "MimeType":
 			j.MimeType = v
+		case "MaxRetries":
+			if err := j.MaxRetries.UnmarshalBinary([]byte(v)); err != nil {
+				return j, fmt.Errorf("Could not decode struct from map: %v", err)
+			}
 		case "DownloadTimeout":
 			j.DownloadTimeout, err = strconv.Atoi(v)
 			if err != nil {
