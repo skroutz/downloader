@@ -51,7 +51,9 @@ Parameters:
  * `aggr_limit`: int, Max concurrency limit for the specified group ( aggr_id ).
  * `aggr_proxy`: ( optional ) string, HTTP proxy configuration. It is set up on aggregation level and it cannot be updated for an existing aggregation.
  * `url`: string, The URL pointing to the resource that will get downloaded.
+ * `callback_type`: string, The callback backend type. Either `http` or `kafka`. Deprecates `callback_url`.
  * `callback_url`: string, The endpoint on which the job callback request will be performed.
+ * `callback_dst`: string, The endpoint on which the job callback request will be performed. Deprecates `callback_url`.
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
  * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
@@ -88,14 +90,14 @@ Below you can find examples of jobs enqueueing and callbacks payloads
 #### Example using `http` as backend
 
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_type": "http", "callback_dst":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' https://downloader.example.com/download
+$ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_type": "http", "callback_dst":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' https://downloader.example.com/download
 # => {"id":"NSb4FOAs9fVaQw"}
 ```
 
 #### Example using `kafka` as backend
 Suppose you have already configured a kafka cluster and created a topic `dwl_images`.
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://localhost:8000/download
+$ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://downloader.example.com/download
 # => {"id":"Hl2VErjyL5UK9A"}
 ```
 
