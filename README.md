@@ -200,6 +200,28 @@ To run the tests and perform various package-related checks, just run:
 $ make check
 ```
 
+Redis
+-------------------------------------------------------------------------------
+
+For convenience, we provide a docker-compose.yml which starts a redis instance,
+which you can use for the checks or manual testing.
+
+To start redis:
+
+```shell
+$ docker-compose up redis
+```
+
+or to start in the background:
+
+```shell
+$ docker-compose start
+$ docker-compose stop
+```
+
+The above requires you to have `docker-compose` installed. If you have not,
+see [here](https://docs.docker.com/compose/install/).
+
 Credits
 -------------------------------------------------
 downloader is released under the GNU General Public License version 3. See [COPYING](COPYING).
