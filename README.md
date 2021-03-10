@@ -77,7 +77,8 @@ Output: JSON array of aggregation names and their pending jobs `[{"name":"jobs:s
 ## Usage
 
 ### Configuration
-A sample configuration can be found in `config.json` file.
+Downloader requires a `config.json` present.
+A sample configuration can be found in `config.json.sample` file.
 It is important to note that the Notifier component depends on the config file
 in order to correctly enable the backends that are defined in the config's `backends` key.
 
