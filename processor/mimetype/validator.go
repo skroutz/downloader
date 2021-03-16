@@ -117,7 +117,7 @@ func (v *Validator) CheckBuffer(p []byte) (string, error) {
 	if len(p) > 0 {
 		mime, err = v.decoder.TypeByBuffer(p)
 		if err != nil {
-			return "", err
+			return mime, err
 		}
 	} else {
 		mime = "application/x-empty"
