@@ -11,8 +11,7 @@ go:
 services:
 - redis
 install:
-- dep ensure
-- go get github.com/rakyll/statik
+- go build
 script:
 - make check
 branches:
