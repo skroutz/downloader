@@ -28,6 +28,7 @@ dump.rdb
 vendor
 fabfile.py
 api/statik
+config.json
 
 # Ignore swap and backup files
 *.swp

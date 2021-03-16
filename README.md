@@ -51,7 +51,9 @@ Parameters:
  * `aggr_limit`: int, Max concurrency limit for the specified group ( aggr_id ).
  * `aggr_proxy`: ( optional ) string, HTTP proxy configuration. It is set up on aggregation level and it cannot be updated for an existing aggregation.
  * `url`: string, The URL pointing to the resource that will get downloaded.
+ * `callback_type`: string, The callback backend type. Either `http` or `kafka`. Deprecates `callback_url`.
  * `callback_url`: string, The endpoint on which the job callback request will be performed.
+ * `callback_dst`: string, The endpoint on which the job callback request will be performed. Deprecates `callback_url`.
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
  * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
@@ -75,7 +77,8 @@ Output: JSON array of aggregation names and their pending jobs `[{"name":"jobs:s
 ## Usage
 
 ### Configuration
-A sample configuration can be found in `config.json` file.
+Downloader requires a `config.json` present.
+A sample configuration can be found in `config.json.sample` file.
 It is important to note that the Notifier component depends on the config file
 in order to correctly enable the backends that are defined in the config's `backends` key.
 
@@ -88,14 +91,14 @@ Below you can find examples of jobs enqueueing and callbacks payloads
 #### Example using `http` as backend
 
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_type": "http", "callback_dst":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' https://downloader.example.com/download
+$ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbin.org/image/png", "callback_type": "http", "callback_dst":"https://callback.example.com", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' https://downloader.example.com/download
 # => {"id":"NSb4FOAs9fVaQw"}
 ```
 
 #### Example using `kafka` as backend
 Suppose you have already configured a kafka cluster and created a topic `dwl_images`.
 ```shell
-$ curl -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://localhost:8000/download
+$ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://downloader.example.com/download
 # => {"id":"Hl2VErjyL5UK9A"}
 ```
 
@@ -199,6 +202,28 @@ To run the tests and perform various package-related checks, just run:
 ```shell
 $ make check
 ```
+
+Redis
+-------------------------------------------------------------------------------
+
+For convenience, we provide a docker-compose.yml which starts a redis instance,
+which you can use for the checks or manual testing.
+
+To start redis:
+
+```shell
+$ docker-compose up redis
+```
+
+or to start in the background:
+
+```shell
+$ docker-compose start
+$ docker-compose stop
+```
+
+The above requires you to have `docker-compose` installed. If you have not,
+see [here](https://docs.docker.com/compose/install/).
 
 Credits
 -------------------------------------------------
