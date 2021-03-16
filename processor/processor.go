@@ -67,7 +67,7 @@ var (
 const (
 	workerMaxInactivity = 5 * time.Second
 	backoffDuration     = 1 * time.Second
-	maxDownloadRetries  = 3
+	maxDownloadRetries  = 2
 
 	//Metric Identifiers
 	statsMaxWorkers                = "maxWorkers"                //Gauge
@@ -688,7 +688,7 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 // and retries the job if its RetryCount < maxRetries else it marks
 // it as failed
 func (wp *workerPool) requeueOrFail(j *job.Job, err string) error {
-	if j.DownloadCount >= maxDownloadRetries {
+	if j.DownloadCount > maxDownloadRetries {
 		return wp.markJobFailed(j, err)
 	}
 	return wp.p.Storage.QueuePendingDownload(j, time.Duration(j.DownloadCount)*RetryBackoffDuration)
