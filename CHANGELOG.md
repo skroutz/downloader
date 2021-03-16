@@ -4,6 +4,7 @@ Breaking changes are prefixed with a "[BREAKING]" label.
 
 ## master (unreleased)
 
+- Migrate to go modules
 
 ## 0.1.1 (2019-07-10)
 
