@@ -4,6 +4,7 @@ Breaking changes are prefixed with a "[BREAKING]" label.
 
 ## master (unreleased)
 
+- Add `extract_image_size` option. [#18](https://github.com/skroutz/downloader/pull/18)
 - Add `max-retries` option. [#17](https://github.com/skroutz/downloader/pull/17)
 - Migrate to go modules
 
