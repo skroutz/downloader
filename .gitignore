@@ -27,6 +27,7 @@ downloader
 dump.rdb
 vendor
 fabfile.py
+fabfile.pyc
 api/statik
 config.json
 
