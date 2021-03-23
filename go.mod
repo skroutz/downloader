@@ -11,6 +11,6 @@ require (
 	github.com/go-stack/stack v1.7.0
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515 // indirect
 	github.com/rakyll/magicmime v0.1.0
-	github.com/rakyll/statik v0.1.1 // indirect
+	github.com/rakyll/statik v0.1.1
 	github.com/urfave/cli v1.18.1
 )

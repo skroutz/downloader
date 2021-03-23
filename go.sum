@@ -13,6 +13,7 @@ github.com/go-stack/stack v1.7.0/go.mod h1:v0f6uXyyMGvRgIKkXu+yp6POWl0qKG85gN/me
 github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515/go.mod h1:+0opPa2QZZtGFBFZlji/RkVcI2GknAs/DXo4wKdlNEc=
 github.com/rakyll/magicmime v0.1.0 h1:aFIp1DqgzjcB3FI7rQk6uZl73i1VPpWswab1YKU4CL4=
 github.com/rakyll/magicmime v0.1.0/go.mod h1:OKs4S+1GpIAB1PCebhwp3rxhyipe7TiImiIeVyFlQt8=
+github.com/rakyll/statik v0.1.1 h1:fCLHsIMajHqD5RKigbFXpvX3dN7c80Pm12+NCrI3kvg=
 github.com/rakyll/statik v0.1.1/go.mod h1:OEi9wJV/fMUAGx1eNjq75DKDsJVuEv1U0oYdX6GX8Zs=
 github.com/urfave/cli v1.18.1 h1:IFc93MpteseEF1dvLEwx5Zn+K7xkbIcBGp36OwYlFx8=
 github.com/urfave/cli v1.18.1/go.mod h1:70zkFmudgCuE/ngEzBv17Jvp/497gISqfk5gWijbERA=
