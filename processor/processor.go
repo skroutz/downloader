@@ -629,7 +629,7 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		}
 
 		// Extracts the mime-type
-		mimeType, err = validator.Read(io.TeeReader(resp.Body, out));
+		mimeType, err = validator.Read(io.TeeReader(resp.Body, out))
 
 		// An error here indicates that the validator did not match the extracted
 		// mime-type with the one given in `Reset`. It is not an error that we

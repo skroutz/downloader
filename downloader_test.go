@@ -418,7 +418,6 @@ func TestExtractImageSize(t *testing.T) {
 	}
 }
 
-
 // test a download URL that will fail the first 2 times but succeeds the 3rd
 func TestTransientDownstreamError(t *testing.T) {
 	var ci job.Callback
