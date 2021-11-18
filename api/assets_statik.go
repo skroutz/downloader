@@ -1,4 +1,6 @@
+//go:build embedstatic
 // +build embedstatic
+
 //go:generate statik -src=../public -f
 
 package api

@@ -1,3 +1,4 @@
+//go:build !embedstatic
 // +build !embedstatic
 
 package api
