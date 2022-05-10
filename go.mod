@@ -1,6 +1,6 @@
 module github.com/skroutz/downloader
 
-go 1.14
+go 1.18
 
 require (
 	github.com/agis/spawn v0.0.0-20180921114948-ff42eda08af2

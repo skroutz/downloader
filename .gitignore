@@ -35,3 +35,6 @@ config.json
 *.swp
 .*
 *~
+
+# Do not ignore workflows
+!.github
