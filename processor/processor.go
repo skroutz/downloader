@@ -35,6 +35,7 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
+	"github.com/skroutz/downloader/processor/filestorage"
 	"image"
 
 	// Register file-types for image size extraction
@@ -50,7 +51,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -106,7 +106,8 @@ const (
 // Processor is the main entity of the downloader.
 // For more info of its architecture see package level doc.
 type Processor struct {
-	Storage *storage.Storage
+	Storage     *storage.Storage
+	FileStorage filestorage.FileStorage
 
 	// ScanInterval is the amount of seconds to wait before re-scanning
 	// Redis for new Aggregations.
@@ -160,7 +161,7 @@ func init() {
 // is not writable.
 //
 // TODO: only add REQUIRED arguments, the rest should be set from the struct
-func New(storage *storage.Storage, scanInterval int, storageDir string, logger *log.Logger) (Processor, error) {
+func New(storage *storage.Storage, scanInterval int, storageDir string, logger *log.Logger, fileStorage filestorage.FileStorage) (Processor, error) {
 	// verify we can write to storageDir
 	//
 	// TODO: create an error type to wrap these errors
@@ -185,6 +186,7 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, logger *
 
 	return Processor{
 		Storage:      storage,
+		FileStorage:  fileStorage,
 		StorageDir:   storageDir,
 		ScanInterval: scanInterval,
 		StatsIntvl:   5 * time.Second,
@@ -355,10 +357,6 @@ POOLS_LOOP:
 	for k := range p.pools {
 		delete(p.pools, k)
 	}
-}
-
-func (p *Processor) storagePath(j *job.Job) string {
-	return path.Join(p.StorageDir, j.Path())
 }
 
 const tmpFileExt = ".tmp"
@@ -609,8 +607,8 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		return derrors.Errorf("processing response", "Received status code %s", resp.Status)
 	}
-
-	out, err := os.Create(wp.p.tmpStoragePath(j))
+	tmpPath := wp.p.tmpStoragePath(j)
+	out, err := os.Create(tmpPath)
 	if err != nil {
 		return derrors.E("creating tmp file", err).Internal().Retriable()
 	}
@@ -657,17 +655,8 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		return derrors.E("syncing to disk", err).Internal().Retriable()
 	}
 
-	path := wp.p.storagePath(j)
-	if err = os.MkdirAll(filepath.Dir(path), os.FileMode(0755)); err != nil {
-		return derrors.E("creating download directory", err).Internal().Retriable()
-	}
-
-	if err = os.Rename(out.Name(), path); err != nil {
-		return derrors.E("moving file to perm location", err).Internal().Retriable()
-	}
-
 	if j.ExtractImageSize && supportedImageSizeMimeType(mimeType) {
-		f, err := os.Open(path)
+		f, err := os.Open(tmpPath)
 		if err != nil {
 			return derrors.E("opening file for image-size extraction", err)
 		}
@@ -681,7 +670,18 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 
 		j.ImageSize = fmt.Sprintf("%dx%d", c.Width, c.Height)
 	}
-
+	if j.S3Bucket != "" && j.S3Region != "" {
+		jobStorage := filestorage.NewAWSS3(j.S3Region, j.S3Bucket)
+		err := jobStorage.StoreFile(tmpPath, j.Path())
+		if err != nil {
+			return derrors.E("storing file to job specified AWS S3 bucket", err)
+		}
+	} else {
+		err := wp.p.FileStorage.StoreFile(tmpPath, j.Path())
+		if err != nil {
+			return derrors.E("storing file to default storage backend", err)
+		}
+	}
 	return nil
 }
 
@@ -791,17 +791,15 @@ func (p *Processor) reaper(ctx context.Context) {
 				}
 				continue
 			}
-
-			filePath := path.Join(p.StorageDir, j.Path())
-			err = os.Remove(filePath)
-			if err != nil && !os.IsNotExist(err) {
-				p.Log.Printf("Error: Could not delete [%s] for job: %s, %s", filePath, j, err.Error())
+			err = p.FileStorage.DeleteFile(j.Path())
+			if err != nil {
+				p.Log.Printf("Error: Could not delete [%s] for job: %s, %s", j.Path(), j, err.Error())
 				p.stats.Add(statsReaperFailures, 1)
 				continue
 			}
 
 			if err == nil {
-				p.Log.Printf("reaper: Deleted file [%s] for job %s", filePath, j)
+				p.Log.Printf("reaper: Deleted file [%s] for job %s", j.Path(), j)
 			}
 
 			err = p.Storage.RemoveJob(j.ID)

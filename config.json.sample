@@ -6,6 +6,10 @@
 		"heartbeat_path":"/tmp/disable_api"
 	},
 	"processor": {
+	    "filestorage": {
+            "type": "filesystem",
+            "rootdir": "/tmp/",
+        },
 		"storage_dir":"/tmp/",
 		"request_headers": {
 			"Accept": "*/*",

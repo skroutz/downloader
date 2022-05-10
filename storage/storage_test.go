@@ -93,7 +93,8 @@ func TestPendingJob(t *testing.T) {
 func TestRetryCallback(t *testing.T) {
 	Redis.FlushDB()
 
-	testJob := job.Job{ID: "TestJob", CallbackState: job.StateFailed}
+	testJob := job.Job{ID: "TestJob", CallbackState: job.StateFailed,
+		CallbackURL: "http://callback.localhost:12345"}
 
 	err := storage.SaveJob(&testJob)
 	if err != nil {

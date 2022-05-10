@@ -209,17 +209,23 @@ func (s *Storage) QueuePendingDownload(j *job.Job, delay time.Duration) error {
 // QueuePendingCallback sets the state of a job to "Pending", saves it and adds it to its aggregation queue
 // If a delay >0 is given, the job is queued with a higher score & actually later in time.
 func (s *Storage) QueuePendingCallback(j *job.Job, delay time.Duration) error {
-	j.CallbackState = job.StatePending
+	if j.HasCallback() {
+		j.CallbackState = job.StatePending
+	}
 	err := s.SaveJob(j)
 	if err != nil {
 		return err
 	}
 
-	z := redis.Z{
-		Member: j.ID,
-		Score:  float64(time.Now().Add(delay).Unix()),
+	if j.HasCallback() {
+		z := redis.Z{
+			Member: j.ID,
+			Score:  float64(time.Now().Add(delay).Unix()),
+		}
+		return s.Redis.ZAdd(CallbackQueue, z).Err()
 	}
-	return s.Redis.ZAdd(CallbackQueue, z).Err()
+
+	return nil
 }
 
 // QueueJobForDeletion pushes the provided job id to RIPQueue and returns any errors
@@ -435,7 +441,10 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 				return j, fmt.Errorf("Could not decode request headers: %v", err)
 			}
 			j.RequestHeaders = headers
-
+		case "S3Bucket":
+			j.S3Bucket = v
+		case "S3Region":
+			j.S3Region = v
 		default:
 			return j, fmt.Errorf("Field %s with value %s was not found in Job struct", k, v)
 		}

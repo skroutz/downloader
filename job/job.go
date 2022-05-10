@@ -92,6 +92,9 @@ type Job struct {
 	// downloading files.
 	// This attribute is optional.
 	RequestHeaders map[string]string `json:"request_headers,omitempty"`
+
+	S3Bucket string `json:"s3_bucket"`
+	S3Region string `json:"s3_region"`
 }
 
 // MarshalBinary is used by redis driver to marshall custom type State
@@ -133,6 +136,22 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 	}
 	j.AggrID = aggrID
 
+	s3Region, ok := tmp["s3_region"].(string)
+	if ok {
+		j.S3Region = s3Region
+	}
+
+	s3Bucket, ok := tmp["s3_bucket"].(string)
+	if ok {
+		j.S3Bucket = s3Bucket
+	}
+
+	if s3Bucket == "" && s3Region != "" {
+		return errors.New("s3_region provided without an s3_bucket")
+	} else if s3Region == "" && s3Bucket != "" {
+		return errors.New("s3_bucket provided without an s3_region")
+	}
+
 	cbURL, ok := tmp["callback_url"].(string)
 	if ok {
 		_, err = url.ParseRequestURI(cbURL)
@@ -146,16 +165,17 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 	// only if callback_url is empty
 	if j.CallbackURL == "" {
 		cbType, ok := tmp["callback_type"].(string)
-		if !ok {
+		if !ok && s3Bucket == "" {
 			return errors.New("callback_type must be a string")
 		}
 
 		cbDst, ok := tmp["callback_dst"].(string)
-		if !ok {
+		if !ok && s3Bucket == "" {
 			return errors.New("callback_dst must be a string")
 		}
 
-		if cbType == "" || cbDst == "" {
+		// Make callbacks optional if a client has provided their own S3 bucket
+		if s3Bucket == "" && (cbType == "" || cbDst == "") {
 			return fmt.Errorf("You need to provide both callback_type (%#v) and callback_dst (%#v)", cbType, cbDst)
 		}
 
@@ -286,6 +306,14 @@ func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
 		ImageSize:    j.ImageSize,
 		Delivered:    true,
 	}, nil
+}
+
+// HasCallback returns true if the job requires a callback.
+// A valid case of a job not having a callback is if it has provided
+// its own AWS S3 bucket for storage and hasn't specified a callback_type
+// and a callback_dst or a callback_url
+func (j *Job) HasCallback() bool {
+	return j.CallbackURL != "" || j.CallbackDst != ""
 }
 
 func (j Job) String() string {
