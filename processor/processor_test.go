@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"github.com/skroutz/downloader/processor/filestorage"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -33,6 +34,7 @@ var (
 	defaultProcessor Processor
 	defaultWP        workerPool
 	testCfg          = "../config.test.json"
+	fileStorage      = filestorage.NewFileSystem("/tmp")
 )
 
 func TestMain(m *testing.M) {
@@ -66,7 +68,7 @@ func TestMain(m *testing.M) {
 	}
 	newChecker = func(string, int, int, time.Duration) (diskcheck.Checker, error) { return testChecker, nil }
 
-	defaultProcessor, err = New(store, 3, storageDir, logger)
+	defaultProcessor, err = New(store, 3, storageDir, logger, fileStorage)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -200,7 +202,7 @@ func TestReaper(t *testing.T) {
 			t.Fatal("Expected Job not to exist in Redis")
 		}
 
-		if _, err := os.Stat(path.Join(storageDir, tc.Job.Path())); !os.IsNotExist(err) {
+		if fileStorage.FileExists(tc.Job.Path()) {
 			t.Fatal("Expected file not to exist")
 		}
 	}

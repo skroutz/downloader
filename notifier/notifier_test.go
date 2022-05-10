@@ -196,6 +196,7 @@ func TestRogueCollection(t *testing.T) {
 			job.Job{
 				ID:            "RogueOne",
 				CallbackState: job.StateInProgress,
+				CallbackURL:   cbServer.URL,
 			},
 			job.StatePending,
 		},
@@ -203,6 +204,7 @@ func TestRogueCollection(t *testing.T) {
 			job.Job{
 				ID:            "Valid",
 				CallbackState: job.StateFailed,
+				CallbackURL:   cbServer.URL,
 			},
 			job.StateFailed,
 		},

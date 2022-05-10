@@ -20,6 +20,7 @@ import (
 	"github.com/skroutz/downloader/config"
 	"github.com/skroutz/downloader/notifier"
 	"github.com/skroutz/downloader/processor"
+	"github.com/skroutz/downloader/processor/filestorage"
 	"github.com/skroutz/downloader/storage"
 
 	klog "github.com/go-kit/kit/log"
@@ -138,7 +139,24 @@ func main() {
 					return err
 				}
 				logger := log.New(os.Stderr, "[processor] ", log.Ldate|log.Ltime)
-				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, logger)
+
+				var fstorage filestorage.FileStorage
+				if cfg.Processor.StorageBackend == nil {
+					fstorage = filestorage.NewFileSystem(cfg.Processor.StorageDir)
+					logger.Println("WARNING: Using only storage_dir is deprecated. " +
+						"Please declare a filestorage section.")
+				} else {
+					switch cfg.Processor.StorageBackend["type"] {
+					case "s3":
+						fstorage = filestorage.NewAWSS3(cfg.Processor.StorageBackend["region"],
+							cfg.Processor.StorageBackend["bucket"])
+					case "filesystem":
+						fstorage = filestorage.NewFileSystem(cfg.Processor.StorageBackend["rootdir"])
+					default:
+						logger.Fatalf("Unknown filestorage type %s", cfg.Processor.StorageBackend["type"])
+					}
+				}
+				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, logger, fstorage)
 				if err != nil {
 					return err
 				}

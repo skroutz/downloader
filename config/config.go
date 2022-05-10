@@ -17,6 +17,7 @@ type Config struct {
 
 	Processor struct {
 		StorageDir     string            `json:"storage_dir"`
+		StorageBackend map[string]string `json:"filestorage"`
 		RequestHeaders map[string]string `json:"request_headers"`
 		StatsInterval  int               `json:"stats_interval"`
 	} `json:"processor"`
