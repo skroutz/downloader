@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-20.04
     services:
       redis:
-        image: redis
+        image: redis:6-alpine
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
