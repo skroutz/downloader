@@ -29,7 +29,7 @@ func TestPerformWithDefaultRequestHeaders(t *testing.T) {
 		"Accept-Encoding": "gzip,deflate,br",
 	}
 
-	aggregation, err := job.NewAggregation("FooBarBaz", 1, "")
+	aggregation, err := job.NewAggregation("FooBarBaz", 1, "", "")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestPerformWithJobRequestHeaders(t *testing.T) {
 		"Accept":     "*/*",
 	}
 
-	aggregation, err := job.NewAggregation("FooBarBaz", 1, "")
+	aggregation, err := job.NewAggregation("FooBarBaz", 1, "", "")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a, err := job.NewAggregation("proxyfoo", 2, "http://www.example.com")
+	a, err := job.NewAggregation("proxyfoo", 2, "http://www.example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

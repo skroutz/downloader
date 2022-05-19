@@ -71,7 +71,7 @@ func TestPendingJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	aggr, err := job.NewAggregation(testJob.AggrID, 8, "")
+	aggr, err := job.NewAggregation(testJob.AggrID, 8, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestRetryCallback(t *testing.T) {
 func TestRemoveAggregationWithNoJobs(t *testing.T) {
 	Redis.FlushDB()
 
-	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "")
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "", "")
 	storage.SaveAggregation(testAggr)
 	err := storage.RemoveAggregation(testAggr.ID)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestRemoveAggregationWithNoJobs(t *testing.T) {
 func TestRemoveAggregationWithJobs(t *testing.T) {
 	Redis.FlushDB()
 
-	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "")
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "", "")
 	storage.SaveAggregation(testAggr)
 	storage.QueuePendingDownload(&testJob, 0)
 
@@ -158,7 +158,7 @@ func TestRemoveAggregationWithJobs(t *testing.T) {
 func TestGetAggregation(t *testing.T) {
 	Redis.FlushDb()
 
-	existingAggr, _ := job.NewAggregation("existingID", 8, "")
+	existingAggr, _ := job.NewAggregation("existingID", 8, "", "")
 	storage.SaveAggregation(existingAggr)
 	testCases := []string{
 		existingAggr.ID,
