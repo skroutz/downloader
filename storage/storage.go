@@ -113,6 +113,37 @@ var (
 			return 1
 		`)
 
+	// Atomically get an aggregation
+	//
+	// This should only return an aggregation if it is available for processing.
+	// This is determined by the ExpiresAt key which contains a Unix Timestamp.
+	// ExpiresAt:
+	//   - false                        : Aggregation not found
+	//   - ""						    : First time seeing this aggregation
+	// 								      set ExpiresAt based on timeout and return it
+	//   - ExpiresAt < now    : Aggregation has expired and thus is available for processing
+	//                                    set ExpiresAt based on timeout and return it
+	//   - ExpiresAt >= now   : Aggregation is already being processed. Return error "BEINGPROCESSED"
+	aggrpop = redis.NewScript(`
+			local aggr = KEYS[1]
+			local timeout = KEYS[2]
+
+			-- get current unix timestamp
+			local cUnixTimestamp = tonumber(redis.call("time")[1])
+
+			-- get aggregations timestamp
+			local expiresAt = redis.call("hget", aggr, "ExpiresAt")
+
+			if expiresAt == false then
+				return redis.error_reply("NOTFOUND")
+			elseif expiresAt == "" or tonumber(expiresAt) < cUnixTimestamp then
+					redis.call("hset", aggr, "ExpiresAt", cUnixTimestamp+timeout)
+					return redis.call("hgetall", aggr)
+			else
+				return redis.error_reply("BEINGPROCESSED")
+			end
+`)
+
 	// ErrEmptyQueue is returned by ZPOP when there is no job in the queue
 	ErrEmptyQueue = errors.New("Queue is empty")
 	// ErrRetryLater is returned by ZPOP when there are only future jobs in the queue
@@ -120,6 +151,9 @@ var (
 	// ErrNotFound is returned by GetJob and GetAggregation when a requested
 	// job, or aggregation respectively is not found in Redis.
 	ErrNotFound = errors.New("Not Found")
+	// ErrAggrBeingProcessed is returned by GetAggregation when the requested aggregation
+	// is being processed by another downloader processor.
+	ErrAggrBeingProcessed = errors.New("Aggregation is already being processed")
 )
 
 // Storage wraps a redis.Client instance.
@@ -261,20 +295,33 @@ func (s *Storage) PopRip() (job.Job, error) {
 // In the case of ErrNotFound, the returned aggregation has valid ID and the
 // default limit.
 func (s *Storage) GetAggregation(id string) (*job.Aggregation, error) {
-	val, err := s.Redis.HGetAll(AggrKeyPrefix + id).Result()
+	val, err := aggrpop.Run(s.Redis, []string{AggrKeyPrefix + id, strconv.Itoa(job.AggregationTimeout)}).Result()
 	if err != nil {
-		return nil, err
+		switch err.Error() {
+		case "BEINGPROCESSED":
+			return nil, ErrAggrBeingProcessed
+		case "NOTFOUND":
+			// continue, a default aggregation will be created
+		default:
+			return nil, err
+		}
 	}
 
-	if v, ok := val["ID"]; !ok || v == "" {
-		aggr, err := job.NewAggregation(id, aggrDefaultLimit, "")
+	values, _ := val.([]interface{})
+	aggrValues := make(map[string]string)
+	for i := 0; i < len(values); i += 2 {
+		aggrValues[values[i].(string)] = values[i+1].(string)
+	}
+
+	if v, ok := aggrValues["ID"]; !ok || v == "" {
+		aggr, err := job.NewAggregation(id, aggrDefaultLimit, "", "")
 		if err != nil {
 			return nil, err
 		}
 		return aggr, ErrNotFound
 	}
 
-	aggr, err := AggregationFromMap(val)
+	aggr, err := AggregationFromMap(aggrValues)
 	return &aggr, err
 }
 
@@ -310,6 +357,8 @@ func AggregationFromMap(m map[string]string) (job.Aggregation, error) {
 			}
 		case "Proxy":
 			aggr.Proxy = v
+		case "ExpiresAt":
+			aggr.ExpiresAt = v
 		default:
 			return aggr, fmt.Errorf("Field %s with value %s was not found in Aggregarion struct", k, v)
 		}
@@ -490,4 +539,43 @@ func (s *Storage) GetStats(id string) ([]byte, error) {
 // SetStats saves stats in Redis
 func (s *Storage) SetStats(id, stats string, expiration time.Duration) error {
 	return s.Redis.Set(strings.Join([]string{statsPrefix, id}, ":"), stats, expiration).Err()
+}
+
+// RequeueInProgressJobs requeues all Jobs of an Aggregation that were previously
+// started but interrupted. This is achieved by setting
+// DownloadState: job.StatePending
+// DownlloadCount: 0
+func (s *Storage) RequeueInProgressJobs(aggrID string) error {
+
+	resetValues := map[string]interface{}{
+		"DownloadState": job.StatePending,
+		"DownloadCount": "0",
+	}
+
+	jobs, err := s.Redis.ZRange(JobsKeyPrefix+aggrID, 0, -1).Result()
+	if err != nil {
+		if err == redis.Nil {
+			// no jobs available, shouldn't be here but still, nothing to do
+			return nil
+		} else {
+			return err
+		}
+	}
+
+	for _, jobId := range jobs {
+		jobState, err := s.Redis.HGet(JobKeyPrefix+jobId, "DownloadState").Result()
+		if err != nil {
+			return err
+		}
+
+		if jobState == job.StateInProgress {
+			setError := s.Redis.HMSet(JobKeyPrefix+jobId, resetValues).Err()
+			if setError != nil {
+				return setError
+			}
+		}
+	}
+
+	// Everything went fine!
+	return nil
 }
