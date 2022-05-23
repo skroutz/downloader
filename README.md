@@ -51,15 +51,17 @@ Parameters:
  * `aggr_limit`: int, Max concurrency limit for the specified group ( aggr_id ).
  * `aggr_proxy`: ( optional ) string, HTTP proxy configuration. It is set up on aggregation level and it cannot be updated for an existing aggregation.
  * `url`: string, The URL pointing to the resource that will get downloaded.
- * `callback_type`: string, The callback backend type. Either `http` or `kafka`. Deprecates `callback_url`.
- * `callback_url`: string, The endpoint on which the job callback request will be performed.
- * `callback_dst`: string, The endpoint on which the job callback request will be performed. Deprecates `callback_url`.
+ * `callback_type`: ( optional if `s3_bucket` is set) string, The callback backend type. Either `http` or `kafka`. Deprecates `callback_url`.
+ * `callback_url`: ( optional if `s3_bucket` is set) string, The endpoint on which the job callback request will be performed.
+ * `callback_dst`: ( optional if `s3_bucket` is set) string, The endpoint on which the job callback request will be performed. Deprecates `callback_url`.
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
  * `max_retries`: ( optional ) int, Maximum download retries when retryiable errors are encountered.
  * `extract_image_size`: ( optional ) boolean, Compute image size on supported mime-types (jpeg, png, gif). For unsupported mime-types this is ignored.
  * `download_timeout`: ( optional ) int, HTTP client timeout per Job, in seconds.
  * `request_headers`: ( optional ) object{string => string}, HTTP Request Headers per job.
+ * `s3_bucket`: ( optional ) string, requires `s3_region`, the caller-owned AWS S3 bucket to store the downloaded object. IAM access should be setup beforehand.
+ * `s3_region`: ( optional ) string, requires `s3_bucket`, the AWS region of the caller-owned AWS S3 bucket.
 
 Output: JSON document containing the download's id e.g, `{"id":"NSb4FOAs9fVaQw"}`
 
@@ -87,6 +89,36 @@ in order to correctly enable the backends that are defined in the config's `back
 If no backends are given the Notifier will throw an error and exit with a non-zero code.
 If you want to enable the http backend add the `http` key along with its `timeout` value.
 If you want to enable the kafka backend add the `kafka` key along with your desired configuration.
+
+#### Storage backend
+Downloader is able to store files on an AWS S3 bucket instead of a filesystem. This is possible by providing a
+`filestorage` section in the configuration file, in which case the `storage_dir` path becomes
+the temporary filesystem storage.
+
+Example using an AWS S3 bucket as the storage backend:
+```
+processor": {
+    "filestorage": {
+        "type": "s3",
+        "bucket": "mybucketname",
+        "region": "eu-west-2"
+    },
+    "storage_dir": "/tmp",
+```
+
+Example using a filesystem as the storage backend:
+```
+processor": {
+    "filestorage": {
+        "type": "filesystem",
+        "rootdir": "/var/lib/downloader",
+    },
+    "storage_dir": "/tmp",
+```
+
+Using just a `storage_dir` without a `filestorage` section is still possible but considered deprecated.
+
+Note: When a download request provides its own S3 bucket/region, the configured filestorage is ignored for this job.
 
 Below you can find examples of jobs enqueueing and callbacks payloads
 
@@ -176,6 +208,9 @@ Unsuccessful Callback Examples:
 For http as a notifier backend any 2XX response to the callback POST marks the callback as successful for the current job.
 For kafka as a notifier backend, we monitor kafka's `Events` channel and mark a job's callback as successful if the delivery report
 of a job's callback has been received and has no errors.
+
+Setting a callback becomes optional if the caller has provided an AWS S3 bucket to store the downloaded file. This is because
+it is possible to use AWS S3 object operations as event triggers directly.
 
 Web UI
 ------------------------------------------------------------------------------
