@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/skroutz/downloader/config"
@@ -173,4 +175,29 @@ func TestGetAggregation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAggregationExpiry(t *testing.T) {
+	Redis.FlushDb()
+
+	now := strconv.FormatInt(time.Now().Unix(), 10)
+	processedAggr, _ := job.NewAggregation("processedAggr", 1, "", now)
+	expiredAggr, _ := job.NewAggregation("expiredAggr", 1, "", "1")
+	storage.SaveAggregation(processedAggr)
+	storage.SaveAggregation(expiredAggr)
+
+	t.Run(processedAggr.ID, func(t *testing.T) {
+		_, err := storage.GetAggregation(processedAggr.ID)
+		if err != ErrAggrBeingProcessed {
+			t.Error("Expected to skip aggregation being processed", err)
+		}
+	})
+
+	t.Run(expiredAggr.ID, func(t *testing.T) {
+		_, err := storage.GetAggregation(expiredAggr.ID)
+		if err != nil {
+			t.Error("Expected to fetch expired aggregation", err)
+		}
+	})
+
 }
