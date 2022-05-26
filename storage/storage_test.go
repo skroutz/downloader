@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/skroutz/downloader/config"
@@ -71,7 +73,7 @@ func TestPendingJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	aggr, err := job.NewAggregation(testJob.AggrID, 8, "")
+	aggr, err := job.NewAggregation(testJob.AggrID, 8, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +128,7 @@ func TestRetryCallback(t *testing.T) {
 func TestRemoveAggregationWithNoJobs(t *testing.T) {
 	Redis.FlushDB()
 
-	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "")
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "", "")
 	storage.SaveAggregation(testAggr)
 	err := storage.RemoveAggregation(testAggr.ID)
 	if err != nil {
@@ -141,7 +143,7 @@ func TestRemoveAggregationWithNoJobs(t *testing.T) {
 func TestRemoveAggregationWithJobs(t *testing.T) {
 	Redis.FlushDB()
 
-	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "")
+	testAggr, _ := job.NewAggregation(testJob.AggrID, 8, "", "")
 	storage.SaveAggregation(testAggr)
 	storage.QueuePendingDownload(&testJob, 0)
 
@@ -158,7 +160,7 @@ func TestRemoveAggregationWithJobs(t *testing.T) {
 func TestGetAggregation(t *testing.T) {
 	Redis.FlushDb()
 
-	existingAggr, _ := job.NewAggregation("existingID", 8, "")
+	existingAggr, _ := job.NewAggregation("existingID", 8, "", "")
 	storage.SaveAggregation(existingAggr)
 	testCases := []string{
 		existingAggr.ID,
@@ -173,4 +175,29 @@ func TestGetAggregation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAggregationExpiry(t *testing.T) {
+	Redis.FlushDb()
+
+	now := strconv.FormatInt(time.Now().Unix(), 10)
+	processedAggr, _ := job.NewAggregation("processedAggr", 1, "", now)
+	expiredAggr, _ := job.NewAggregation("expiredAggr", 1, "", "1")
+	storage.SaveAggregation(processedAggr)
+	storage.SaveAggregation(expiredAggr)
+
+	t.Run(processedAggr.ID, func(t *testing.T) {
+		_, err := storage.GetAggregation(processedAggr.ID)
+		if err != ErrAggrBeingProcessed {
+			t.Error("Expected to skip aggregation being processed", err)
+		}
+	})
+
+	t.Run(expiredAggr.ID, func(t *testing.T) {
+		_, err := storage.GetAggregation(expiredAggr.ID)
+		if err != nil {
+			t.Error("Expected to fetch expired aggregation", err)
+		}
+	})
+
 }

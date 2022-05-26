@@ -36,6 +36,7 @@ import (
 	"expvar"
 	"fmt"
 	"image"
+	"strconv"
 
 	// Register file-types for image size extraction
 	_ "image/gif"
@@ -199,7 +200,6 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, logger *
 // It spawns helpers goroutines & starts spawning worker pools by scanning Redis for new Aggregations
 func (p *Processor) Start(closeCh chan struct{}) {
 	p.Log.Println("Starting...")
-	p.collectRogueDownloads()
 
 	ctx, cancel := context.WithCancel(context.TODO())
 
@@ -307,6 +307,9 @@ POOLS_LOOP:
 					if _, ok := p.pools[aggrID]; !ok {
 						aggr, err := p.Storage.GetAggregation(aggrID)
 						if err != nil {
+							if err == storage.ErrAggrBeingProcessed {
+								continue
+							}
 							p.Log.Printf("Error fetching aggregation with id '%s': %s",
 								aggrID, err)
 							if err != storage.ErrNotFound {
@@ -315,6 +318,16 @@ POOLS_LOOP:
 							p.Log.Printf("Using aggregation with id '%s', and limit: %d",
 								aggr.ID, aggr.Limit)
 						}
+
+						// If this is a requeue due to timeout make sure
+						// there are no stale jobs
+						if aggr.ExpiresAt != "" {
+							ok := p.Storage.RequeueInProgressJobs(aggrID)
+							if ok != nil {
+								continue
+							}
+						}
+
 						wp, err := p.newWorkerPool(*aggr)
 						if err != nil {
 							p.Log.Printf("Error fetching aggregation with proxy '%s': %s", aggrID, err)
@@ -365,53 +378,6 @@ const tmpFileExt = ".tmp"
 
 func (p *Processor) tmpStoragePath(j *job.Job) string {
 	return path.Join(p.StorageDir, j.ID+tmpFileExt)
-}
-
-// collectRogueDownloads Scans Redis for jobs that have InProgress DownloadState.
-// This indicates they are leftover from an interrupted previous run and should get requeued.
-func (p *Processor) collectRogueDownloads() {
-	var cursor uint64
-	var rogueCount uint64
-
-	for {
-		var keys []string
-		var err error
-		keys, cursor, err = p.Storage.Redis.Scan(cursor, storage.JobKeyPrefix+"*", 50).Result()
-		if err != nil {
-			p.Log.Println("Error scanning Redis for rogue downloads:", err)
-			break
-		}
-
-		for _, jobID := range keys {
-			strCmd := p.Storage.Redis.HGet(jobID, "DownloadState")
-			if strCmd.Err() != nil {
-				p.Log.Println(strCmd.Err())
-				continue
-			}
-			if job.State(strCmd.Val()) == job.StateInProgress {
-				jb, err := p.Storage.GetJob(strings.TrimPrefix(jobID, storage.JobKeyPrefix))
-				if err != nil {
-					p.Log.Printf("Error fetching job with id '%s' from Redis: %s", jobID, err)
-					continue
-				}
-				err = p.Storage.QueuePendingDownload(&jb, 0)
-				if err != nil {
-					p.Log.Printf("Error queueing job with id '%s' for download: %s", jb.ID, err)
-					continue
-				}
-				rogueCount++
-			}
-		}
-
-		if cursor == 0 {
-			break
-		}
-	}
-
-	if rogueCount > 0 {
-		p.Log.Printf("Queued %d rogue downloads", rogueCount)
-	}
-
 }
 
 // newWorkerPool initializes and returns a WorkerPool for aggr.
@@ -475,10 +441,14 @@ func (wp *workerPool) activeWorkers() int {
 func (wp *workerPool) start(ctx context.Context, storageDir string) {
 	wp.log.Printf("Started working...")
 	startedAt := time.Now()
+	wp.aggr.ExpiresAt = strconv.FormatInt(startedAt.Unix(), 10)
+
 	// Track the number of processed downloads.
 	downloads := 0
 
 	var wg sync.WaitGroup
+
+	var updateTimeoutCnt int = 0
 
 WORKERPOOL_LOOP:
 	for {
@@ -487,7 +457,7 @@ WORKERPOOL_LOOP:
 			wp.log.Printf("Received shutdown signal...")
 			break WORKERPOOL_LOOP
 		default:
-			job, err := wp.p.Storage.PopJob(&wp.aggr)
+			currentJob, err := wp.p.Storage.PopJob(&wp.aggr)
 			if err != nil {
 				switch err {
 				case storage.ErrEmptyQueue:
@@ -506,6 +476,14 @@ WORKERPOOL_LOOP:
 
 				// backoff & wait for workers to finish or a job to be queued
 				time.Sleep(backoffDuration)
+
+				if updateTimeoutCnt == 0 {
+					// I am still alive, update expire
+					var newTimeout int64 = time.Now().Unix() + job.AggregationTimeout
+					wp.p.Storage.Redis.HSet(storage.AggrKeyPrefix+wp.aggr.ID, "ExpiresAt", newTimeout)
+				}
+				updateTimeoutCnt = (updateTimeoutCnt + 1) % 20
+
 				continue
 			}
 			if wp.activeWorkers() < wp.aggr.Limit {
@@ -517,7 +495,7 @@ WORKERPOOL_LOOP:
 					wp.work(ctx, storageDir)
 				}()
 			}
-			wp.jobChan <- job
+			wp.jobChan <- currentJob
 			downloads++
 		}
 	}

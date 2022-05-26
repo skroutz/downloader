@@ -29,7 +29,7 @@ var (
 	logger           = log.New(os.Stderr, "[test processor]", log.Ldate|log.Ltime|log.Lshortfile)
 	mux              = http.NewServeMux()
 	server           = httptest.NewServer(mux)
-	defaultAggr, _   = job.NewAggregation("FooBar", 1, "")
+	defaultAggr, _   = job.NewAggregation("FooBar", 1, "", "")
 	defaultProcessor Processor
 	defaultWP        workerPool
 	testCfg          = "../config.test.json"
@@ -206,55 +206,6 @@ func TestReaper(t *testing.T) {
 	}
 }
 
-func TestRogueCollection(t *testing.T) {
-	err := Redis.FlushDB().Err()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	testcases := []struct {
-		Job           job.Job
-		expectedState job.State
-	}{
-		{
-			job.Job{
-				ID:            "RogueOne",
-				AggrID:        "foobar",
-				DownloadState: job.StateInProgress,
-			},
-			job.StatePending,
-		},
-		{
-			job.Job{
-				ID:            "Valid",
-				AggrID:        "foobar",
-				DownloadState: job.StateSuccess,
-			},
-			job.StateSuccess,
-		},
-	}
-
-	for _, testcase := range testcases {
-		err = store.SaveJob(&testcase.Job)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	defaultProcessor.collectRogueDownloads()
-
-	for _, testcase := range testcases {
-		j, err := store.GetJob(testcase.Job.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if j.DownloadState != testcase.expectedState {
-			t.Fatalf("Expected job state Pending, found %s", j.DownloadState)
-		}
-	}
-}
-
 func TestChecker(t *testing.T) {
 	err := Redis.FlushDB().Err()
 	if err != nil {
@@ -270,7 +221,7 @@ func TestChecker(t *testing.T) {
 	testChecker.Sick()
 	time.Sleep(10 * time.Millisecond)
 
-	a, _ := job.NewAggregation("foobar", 2, "")
+	a, _ := job.NewAggregation("foobar", 2, "", "")
 	store.SaveAggregation(a)
 
 	jobs := []job.Job{
@@ -336,7 +287,6 @@ func TestJobWithNoAggregation(t *testing.T) {
 	if err := Redis.FlushDB().Err(); err != nil {
 		t.Fatal(err)
 	}
-
 	reqs := make(chan struct{}, 1)
 	addHandler(t.Name(), func(w http.ResponseWriter, r *http.Request) {
 		reqs <- struct{}{}
@@ -346,7 +296,6 @@ func TestJobWithNoAggregation(t *testing.T) {
 	testJob := getTestJob(t)
 	//This aggregation hasn't been stored in Redis
 	testJob.AggrID = "Aggr" + t.Name()
-
 	err := store.QueuePendingDownload(&testJob, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -361,7 +310,6 @@ func TestJobWithNoAggregation(t *testing.T) {
 	case <-time.After(time.Second * 5):
 		t.Fatal("Expected job to have been processed")
 	}
-
 	closeChan <- struct{}{}
 	<-closeChan
 }
