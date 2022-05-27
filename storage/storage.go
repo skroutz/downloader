@@ -127,6 +127,9 @@ var (
 	aggrpop = redis.NewScript(`
 			local aggr = KEYS[1]
 			local timeout = KEYS[2]
+			
+			-- required replication method for redis < 5.0
+			redis.replicate_commands()
 
 			-- get current unix timestamp
 			local cUnixTimestamp = tonumber(redis.call("time")[1])
