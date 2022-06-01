@@ -94,11 +94,18 @@ func main() {
 
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				storage, err := storage.New(redisClient("api", cfg.Redis.Addr))
+				useSentinel := !(cfg.Redis.MasterName == "" || len(cfg.Redis.Sentinel) == 0)
+
+				var storage_o *storage.Storage
+				if useSentinel {
+					storage_o, err = storage.NewWithSentinel(cfg.Redis.Sentinel, cfg.Redis.MasterName, "api")
+				} else {
+					storage_o, err = storage.New(redisClient("api", cfg.Redis.Addr))
+				}
 				if err != nil {
 					return err
 				}
-				api := api.New(storage, c.String("host"),
+				api := api.New(storage_o, c.String("host"),
 					c.Int("port"), cfg.API.HeartbeatPath, logger)
 
 				go func() {
@@ -110,7 +117,33 @@ func main() {
 					}
 				}()
 
-				<-sigCh
+				if useSentinel {
+					// Handle Sentinel failover
+					failoverChan := make(chan bool)
+					sentPubSub := storage_o.SentinelClient.PSubscribe("+switch-master")
+
+					// Receive Sentinel +switch-master event and notify via failOverChan
+					go storage.CheckSentinelFailover(sentPubSub, cfg.Redis.MasterName, failoverChan)
+
+					for loop := true; loop; {
+						select {
+						case <-sigCh:
+							// We need to exit
+							loop = false
+						case <-failoverChan:
+							// We need to re-initiate a redis client
+							logger.Log("SENTINEL", "+switch-master", "received")
+							err := storage_o.ReEstablishRedisConnection(cfg.Redis.Sentinel, cfg.Redis.MasterName, "api")
+							if err != nil {
+								logger.Log("Could not re-establish redis connection after a Sentinel failover event: %s", err)
+								loop = false
+							}
+						}
+					}
+				} else {
+					<-sigCh
+				}
+
 				logger.Log("action", "shutdown", "action_phase", "start")
 				err = api.Server.Shutdown(context.TODO())
 				if err != nil {
@@ -134,7 +167,14 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				storage, err := storage.New(redisClient("processor", cfg.Redis.Addr))
+				useSentinel := !(cfg.Redis.MasterName == "" || len(cfg.Redis.Sentinel) == 0)
+
+				var storage_o *storage.Storage
+				if useSentinel {
+					storage_o, err = storage.NewWithSentinel(cfg.Redis.Sentinel, cfg.Redis.MasterName, "api")
+				} else {
+					storage_o, err = storage.New(redisClient("api", cfg.Redis.Addr))
+				}
 				if err != nil {
 					return err
 				}
@@ -156,7 +196,7 @@ func main() {
 						logger.Fatalf("Unknown filestorage type %s", cfg.Processor.StorageBackend["type"])
 					}
 				}
-				processor, err := processor.New(storage, 3, cfg.Processor.StorageDir, logger, fstorage)
+				processor, err := processor.New(storage_o, 3, cfg.Processor.StorageDir, logger, fstorage)
 				if err != nil {
 					return err
 				}
@@ -169,7 +209,33 @@ func main() {
 				closeChan := make(chan struct{})
 				go processor.Start(closeChan)
 
-				<-sigCh
+				if useSentinel {
+					// Handle Sentinel failover
+					failoverChan := make(chan bool)
+					sentPubSub := storage_o.SentinelClient.PSubscribe("+switch-master")
+
+					// Receive Sentinel +switch-master event and notify via failOverChan
+					go storage.CheckSentinelFailover(sentPubSub, cfg.Redis.MasterName, failoverChan)
+
+					for loop := true; loop; {
+						select {
+						case <-sigCh:
+							// We need to exit
+							loop = false
+						case <-failoverChan:
+							// We need to re-initiate a redis client
+							logger.Println("SENTINEL", "+switch-master", "received")
+							err := storage_o.ReEstablishRedisConnection(cfg.Redis.Sentinel, cfg.Redis.MasterName, "api")
+							if err != nil {
+								logger.Printf("Could not re-establish redis connection after a Sentinel failover event: %s\n", err)
+								loop = false
+							}
+						}
+					}
+				} else {
+					<-sigCh
+				}
+
 				processor.Log.Println("Shutting down...")
 				closeChan <- struct{}{}
 				processor.Log.Println("Waiting for worker pools to shut down...")
@@ -192,12 +258,19 @@ func main() {
 			Action: func(c *cli.Context) error {
 				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-				storage, err := storage.New(redisClient("notifier", cfg.Redis.Addr))
+				useSentinel := !(cfg.Redis.MasterName == "" || len(cfg.Redis.Sentinel) == 0)
+
+				var storage_o *storage.Storage
+				if useSentinel {
+					storage_o, err = storage.NewWithSentinel(cfg.Redis.Sentinel, cfg.Redis.MasterName, "api")
+				} else {
+					storage_o, err = storage.New(redisClient("api", cfg.Redis.Addr))
+				}
 				if err != nil {
 					return err
 				}
 				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
-				notifier, err := notifier.New(storage, cfg.Notifier.Concurrency, logger, cfg.Notifier.DownloadURL)
+				notifier, err := notifier.New(storage_o, cfg.Notifier.Concurrency, logger, cfg.Notifier.DownloadURL)
 				if err != nil {
 					logger.Fatal(err)
 				}
@@ -217,7 +290,33 @@ func main() {
 				closeChan := make(chan struct{})
 				go notifier.Start(closeChan, cfg.Backends)
 
-				<-sigCh
+				if useSentinel {
+					// Handle Sentinel failover
+					failoverChan := make(chan bool)
+					sentPubSub := storage_o.SentinelClient.PSubscribe("+switch-master")
+
+					// Receive Sentinel +switch-master event and notify via failOverChan
+					go storage.CheckSentinelFailover(sentPubSub, cfg.Redis.MasterName, failoverChan)
+
+					for loop := true; loop; {
+						select {
+						case <-sigCh:
+							// We need to exit
+							loop = false
+						case <-failoverChan:
+							// We need to re-initiate a redis client
+							logger.Println("SENTINEL", "+switch-master", "received")
+							err := storage_o.ReEstablishRedisConnection(cfg.Redis.Sentinel, cfg.Redis.MasterName, "api")
+							if err != nil {
+								logger.Printf("Could not re-establish redis connection after a Sentinel failover event: %s\n", err)
+								loop = false
+							}
+						}
+					}
+				} else {
+					<-sigCh
+				}
+
 				notifier.Log.Println("Shutting down...")
 				closeChan <- struct{}{}
 				notifier.Log.Println("Waiting for notifier to shut down...")

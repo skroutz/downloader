@@ -161,7 +161,10 @@ var (
 
 // Storage wraps a redis.Client instance.
 type Storage struct {
+	// Redis Client - used both in Sentinel and non-Sentinel environments
 	Redis *redis.Client
+	// Sentinel Client used to subscribe to failover events
+	SentinelClient *redis.Client
 }
 
 // New returns a new Storage that can communicate with Redis. If Redis
@@ -178,6 +181,89 @@ func New(r *redis.Client) (*Storage, error) {
 	}
 
 	return &Storage{Redis: r}, nil
+}
+
+// Creates a new Storage instance to communicate with Redis. Does the same things as
+// storage.New but also creates a sentinel redis client to subscribe to failover events.
+func NewWithSentinel(sentinelAddrs []string, masterName string, clientName string) (*Storage, error) {
+	setClientName := func(c *redis.Conn) error {
+		ok, err := c.ClientSetName(clientName).Result()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("Error setting Redis client name to " + clientName)
+		}
+		return nil
+	}
+
+	redis_c := redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName:    masterName,
+		SentinelAddrs: sentinelAddrs,
+		OnConnect:     setClientName,
+	})
+
+	if err := redis_c.Ping().Err(); err != nil {
+		return nil, err
+	}
+
+	sent_c, err := sentinelClient(sentinelAddrs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Storage{Redis: redis_c, SentinelClient: sent_c}, nil
+
+}
+
+// Create a new Redis Client and update the existing Storage instance. This will update
+// redis client on all goroutines as well.
+func (s *Storage) ReEstablishRedisConnection(sentinelAddrs []string, masterName string, clientName string) error {
+	s_n, err := NewWithSentinel(sentinelAddrs, masterName, clientName)
+	if err != nil {
+		return err
+	}
+
+	s.Redis = s_n.Redis
+
+	return nil
+}
+
+// Check for Sentinel events using pubsub. Notifies main routine using ch.
+// This is used to detect a failover event.
+func CheckSentinelFailover(pubsub *redis.PubSub, sentMaster string, ch chan<- bool) {
+	for {
+		message, err := pubsub.ReceiveTimeout(time.Second * 1.0)
+
+		if err != nil {
+			continue
+		}
+
+		switch msg := message.(type) {
+		case *redis.Message:
+			master := strings.Split(msg.Payload, " ")[0]
+			if master == sentMaster {
+				ch <- true
+			}
+		}
+	}
+}
+
+// Finds the first available Sentinel and connects to it.
+func sentinelClient(sentinelAddrs []string) (*redis.Client, error) {
+	for _, addr := range sentinelAddrs {
+		sent_c := redis.NewClient(&redis.Options{
+			Addr: addr,
+		})
+
+		if err := sent_c.Ping().Err(); err != nil {
+			continue
+		}
+		return sent_c, nil
+	}
+
+	sentAddrs := strings.Join(sentinelAddrs, ", ")
+	return nil, errors.New("Error connecting to Sentinels " + sentAddrs)
 }
 
 // SaveJob updates or creates j in Redis.

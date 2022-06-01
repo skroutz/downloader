@@ -9,6 +9,11 @@ import (
 type Config struct {
 	Redis struct {
 		Addr string `json:"addr"`
+		// Sentinel settings
+		// List of Sentinel Hosts
+		Sentinel []string `json:"sentinel"`
+		// Sentinel Master Name
+		MasterName string `json:"master_name"`
 	} `json:"redis"`
 
 	API struct {
