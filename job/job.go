@@ -63,6 +63,9 @@ type Job struct {
 	// all users of Downloader have upgraded their request scheme.
 	CallbackURL string `json:"callback_url"`
 
+	// This is the base URL that the downloaded file can be found.
+	DownloadURL string `json:"-"`
+
 	// Auxiliary ad-hoc information used for debugging.
 	CallbackMeta string `json:"-"`
 
@@ -283,16 +286,18 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 // CallbackInfo validates the state of a job and returns a callback info
 // along with an error if appropriate. The expected argument downloadURL is
 // the base path of a downloaded resource in the downloader.
-func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
-	var dwURL string
-
+func (j *Job) CallbackInfo() (Callback, error) {
 	if j.DownloadState != StateSuccess && j.DownloadState != StateFailed {
 		return Callback{}, fmt.Errorf("Invalid job download state: '%s'", j.DownloadState)
 	}
 
 	if j.DownloadState == StateSuccess {
-		downloadURL.Path = path.Join(downloadURL.Path, j.Path())
-		dwURL = downloadURL.String()
+		u, err := url.Parse(j.DownloadURL)
+		if err != nil {
+			return Callback{}, err
+		}
+		u.Path = path.Join(u.Path, j.Path())
+		j.DownloadURL = u.String()
 	}
 
 	return Callback{
@@ -300,7 +305,7 @@ func (j *Job) CallbackInfo(downloadURL url.URL) (Callback, error) {
 		Error:        j.DownloadMeta,
 		Extra:        j.Extra,
 		ResourceURL:  j.URL,
-		DownloadURL:  dwURL,
+		DownloadURL:  j.DownloadURL,
 		JobID:        j.ID,
 		ResponseCode: j.ResponseCode,
 		ImageSize:    j.ImageSize,
@@ -319,8 +324,9 @@ func (j *Job) HasCallback() bool {
 func (j Job) String() string {
 	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, "+
 		"ExtractImageSize:%t, ImageSize: %s, "+
-		"callback_url:%s, callback_type:%s, callback_dst:%s, Timeout:%d, RequestHeaders:%v}",
+		"callback_url:%s, callback_type:%s, callback_dst:%s, Timeout:%d, RequestHeaders:%v, DownloadURL:%s}",
 		j.ID, j.AggrID, j.URL,
 		j.ExtractImageSize, j.ImageSize,
-		j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout, j.RequestHeaders)
+		j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout, j.RequestHeaders,
+		j.DownloadURL)
 }

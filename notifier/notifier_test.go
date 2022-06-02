@@ -57,7 +57,7 @@ func TestUndefinedBackend(t *testing.T) {
 		CallbackType:  "foo",
 		CallbackDst:   cbServer.URL}
 
-	notifier, err := New(store, 10, logger, "http://blah.com/")
+	notifier, err := New(store, 10, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 	}
 
 	statsID = "jobdeletion"
-	notifier, err := New(store, 10, logger, "http://blah.com/")
+	notifier, err := New(store, 10, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestNotifyJobDeletion(t *testing.T) {
 
 func TestRogueCollection(t *testing.T) {
 	statsID = "rogue"
-	notifier, err := New(store, 10, logger, "http://blah.com/")
+	notifier, err := New(store, 10, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

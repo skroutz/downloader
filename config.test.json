@@ -6,6 +6,7 @@
 		"heartbeat_path":"/tmp/disable_api"
 	},
 	"processor": {
+		"download_url": "http://localhost/foo",
 		"storage_dir":"/tmp/",
 		"request_headers": {
 			"Accept": "*/*",
@@ -14,7 +15,6 @@
 		"stats_interval": 300
 	},
 	"notifier": {
-		"download_url": "http://localhost/foo",
 		"concurrency": 10,
 		"stats_interval": 300,
 		"deletion_interval": 1

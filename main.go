@@ -196,7 +196,7 @@ func main() {
 						logger.Fatalf("Unknown filestorage type %s", cfg.Processor.StorageBackend["type"])
 					}
 				}
-				processor, err := processor.New(storage_o, 3, cfg.Processor.StorageDir, logger, fstorage)
+				processor, err := processor.New(storage_o, 3, cfg.Processor.StorageDir, logger, fstorage, cfg.Processor.DownloadURL)
 				if err != nil {
 					return err
 				}
@@ -270,7 +270,7 @@ func main() {
 					return err
 				}
 				logger := log.New(os.Stderr, "[notifier] ", log.Ldate|log.Ltime)
-				notifier, err := notifier.New(storage_o, cfg.Notifier.Concurrency, logger, cfg.Notifier.DownloadURL)
+				notifier, err := notifier.New(storage_o, cfg.Notifier.Concurrency, logger)
 				if err != nil {
 					logger.Fatal(err)
 				}

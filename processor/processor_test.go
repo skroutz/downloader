@@ -3,7 +3,6 @@ package processor
 import (
 	"context"
 	"fmt"
-	"github.com/skroutz/downloader/processor/filestorage"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/skroutz/downloader/processor/filestorage"
 
 	"github.com/go-redis/redis"
 	"github.com/skroutz/downloader/config"
@@ -68,7 +69,7 @@ func TestMain(m *testing.M) {
 	}
 	newChecker = func(string, int, int, time.Duration) (diskcheck.Checker, error) { return testChecker, nil }
 
-	defaultProcessor, err = New(store, 3, storageDir, logger, fileStorage)
+	defaultProcessor, err = New(store, 3, storageDir, logger, fileStorage, cfg.Processor.DownloadURL)
 	if err != nil {
 		log.Fatal(err)
 	}

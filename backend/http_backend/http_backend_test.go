@@ -52,7 +52,7 @@ func TestHttpBackendNotifySucess(t *testing.T) {
 		t.Fatalf("Start should not return error")
 	}
 
-	cbInfoS, _ := jobS.CallbackInfo(*dwURL)
+	cbInfoS, _ := jobS.CallbackInfo()
 
 	wg.Add(1)
 	go func() {

@@ -35,9 +35,10 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
-	"github.com/skroutz/downloader/processor/filestorage"
 	"image"
 	"strconv"
+
+	"github.com/skroutz/downloader/processor/filestorage"
 
 	// Register file-types for image size extraction
 	_ "image/gif"
@@ -134,6 +135,9 @@ type Processor struct {
 	pools map[string]*workerPool
 
 	stats *stats.Stats
+
+	// This is the download URL that the notifier should use for the callback
+	DownloadURL string
 }
 
 // workerPool corresponds to an Aggregation. It spawns and instruments the
@@ -162,7 +166,8 @@ func init() {
 // is not writable.
 //
 // TODO: only add REQUIRED arguments, the rest should be set from the struct
-func New(storage *storage.Storage, scanInterval int, storageDir string, logger *log.Logger, fileStorage filestorage.FileStorage) (Processor, error) {
+func New(storage *storage.Storage, scanInterval int, storageDir string, logger *log.Logger,
+	fileStorage filestorage.FileStorage, downloadURL string) (Processor, error) {
 	// verify we can write to storageDir
 	//
 	// TODO: create an error type to wrap these errors
@@ -185,6 +190,11 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, logger *
 		return Processor{}, errors.New("Error verifying storage directory is writable: " + err.Error())
 	}
 
+	_, err = url.ParseRequestURI(downloadURL)
+	if err != nil {
+		return Processor{}, fmt.Errorf("Could not parse Download URL, %v", err)
+	}
+
 	return Processor{
 		Storage:      storage,
 		FileStorage:  fileStorage,
@@ -194,6 +204,7 @@ func New(storage *storage.Storage, scanInterval int, storageDir string, logger *
 		Log:          logger,
 		pools:        make(map[string]*workerPool),
 		stats:        stats.New("Processor", time.Second, func(m *expvar.Map) {}),
+		DownloadURL:  downloadURL,
 	}, nil
 }
 
@@ -702,10 +713,11 @@ func (wp *workerPool) perform(ctx context.Context, j *job.Job, validator *mimety
 		}
 		return
 	}
-	wp.log.Println("perform: Successfully completed download for", j)
 
 	if err = wp.markJobSuccess(j); err != nil {
 		wp.log.Printf("perform: Error marking %s successful: %s", j, err)
+	} else {
+		wp.log.Println("perform: Successfully completed download for", j)
 	}
 }
 
@@ -735,6 +747,7 @@ func (wp *workerPool) markJobInProgress(j *job.Job) error {
 // Marks j as successful and enqueues it for callback
 func (wp *workerPool) markJobSuccess(j *job.Job) error {
 	j.DownloadState = job.StateSuccess
+	j.DownloadURL = wp.p.DownloadURL
 	j.DownloadMeta = ""
 
 	// NOTE: we depend on QueuePendingCallback calling SaveJob(j)
