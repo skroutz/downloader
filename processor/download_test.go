@@ -16,7 +16,7 @@ import (
 )
 
 func TestPerformWithDefaultRequestHeaders(t *testing.T) {
-	processor, err := New(store, 1, storageDir, logger, fileStorage)
+	processor, err := New(store, 1, storageDir, logger, fileStorage, defaultProcessor.DownloadURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestPerformWithDefaultRequestHeaders(t *testing.T) {
 }
 
 func TestPerformWithJobRequestHeaders(t *testing.T) {
-	processor, err := New(store, 1, storageDir, logger, fileStorage)
+	processor, err := New(store, 1, storageDir, logger, fileStorage, defaultProcessor.DownloadURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestPerformWithJobRequestHeaders(t *testing.T) {
 func TestProxy(t *testing.T) {
 	var wg sync.WaitGroup
 	//Since we are messing with the default settings, we create a new processor here
-	p, err := New(store, 1, storageDir, logger, fileStorage)
+	p, err := New(store, 1, storageDir, logger, fileStorage, defaultProcessor.DownloadURL)
 	if err != nil {
 		t.Fatal(err)
 	}

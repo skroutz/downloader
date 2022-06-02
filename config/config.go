@@ -25,13 +25,13 @@ type Config struct {
 		StorageBackend map[string]string `json:"filestorage"`
 		RequestHeaders map[string]string `json:"request_headers"`
 		StatsInterval  int               `json:"stats_interval"`
+		DownloadURL    string            `json:"download_url"`
 	} `json:"processor"`
 
 	Notifier struct {
-		DownloadURL      string `json:"download_url"`
-		Concurrency      int    `json:"concurrency"`
-		StatsInterval    int    `json:"stats_interval"`
-		DeletionInterval int    `json:"deletion_interval"`
+		Concurrency      int `json:"concurrency"`
+		StatsInterval    int `json:"stats_interval"`
+		DeletionInterval int `json:"deletion_interval"`
 	} `json:"notifier"`
 
 	Backends map[string]map[string]interface{}

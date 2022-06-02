@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -49,10 +48,9 @@ var (
 // and notifying back the respective users by issuing HTTP requests to their
 // provided callback URLs.
 type Notifier struct {
-	Storage     *storage.Storage
-	Log         *log.Logger
-	DownloadURL *url.URL
-	StatsIntvl  time.Duration
+	Storage    *storage.Storage
+	Log        *log.Logger
+	StatsIntvl time.Duration
 
 	// DeletionIntvl indicates the time after which downloaded files must be
 	// enqueued for deletion.
@@ -76,12 +74,7 @@ func init() {
 }
 
 // New takes the concurrency of the notifier as an argument
-func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string) (Notifier, error) {
-	url, err := url.ParseRequestURI(dwnlURL)
-	if err != nil {
-		return Notifier{}, fmt.Errorf("Could not parse Download URL, %v", err)
-	}
-
+func New(s *storage.Storage, concurrency int, logger *log.Logger) (Notifier, error) {
 	if concurrency <= 0 {
 		return Notifier{}, errors.New("Notifier Concurrency must be a positive number")
 	}
@@ -92,7 +85,6 @@ func New(s *storage.Storage, concurrency int, logger *log.Logger, dwnlURL string
 		StatsIntvl:  5 * time.Second,
 		concurrency: concurrency,
 		cbChan:      make(chan job.Job),
-		DownloadURL: url,
 		backends:    make(map[string]backend.Backend),
 	}
 
@@ -325,7 +317,7 @@ func (n *Notifier) PreNotify(j *job.Job) (job.Callback, error) {
 		return job.Callback{}, err
 	}
 
-	cbInfo, err := j.CallbackInfo(*n.DownloadURL)
+	cbInfo, err := j.CallbackInfo()
 	if err != nil {
 		return job.Callback{}, n.markCbFailed(j, err.Error())
 	}
