@@ -8,7 +8,6 @@ RUN apt-get update \
     && apt-get install -y librdkafka-dev libmagic-dev \
     && make
 
-
 FROM debian:bullseye-slim
 
 RUN apt-get update \
@@ -17,11 +16,11 @@ RUN apt-get update \
     && groupadd -r downloader \
     && useradd --no-log-init --shel /bin/bash -r -g downloader downloader
 
-COPY --chown=downloader:downloader --from=builder \
-        /srv/downloader /srv/config.json.sample /srv/
+COPY --chown=downloader:downloader --from=builder /srv/downloader /srv/bin/entrypoint.sh /srv/
+COPY --chown=downloader:downloader --from=builder /srv/config.test.json /srv/config.json
 
 USER downloader
 WORKDIR /srv
 
-ENTRYPOINT [ "/srv/downloader" ]
+ENTRYPOINT [ "/srv/entrypoint.sh" ]
 CMD [ "--help" ]
