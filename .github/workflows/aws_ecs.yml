@@ -1,0 +1,90 @@
+#
+# The current GitHub Action workflow is used to:
+#
+# - containerize the downloader application
+# - push the image to Amazon Elastic Container Registry (ECR)
+# - deploy it to Amazon Elastic Container Service (ECS)
+#
+# The workflow is based on the official Github guide[0] and uses OpenID Connect[1] in order to be
+# able to access resources in AWS[2].
+#
+#  [0]: https://docs.github.com/en/actions/deployment/deploying-to-your-cloud-provider/deploying-to-amazon-elastic-container-service
+#  [1]: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect
+#  [2]: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+#
+name: Deploy Downloader to Amazon ECS on AWS Fargate
+
+on:
+  push:
+    branches:
+      - 'staging'
+
+env:
+  AWS_REGION: eu-central-1
+  CONTAINER_NAME: 'downloader'
+  ECR_REPOSITORY: 'downloader'
+  ECS_SERVICE: 'downloader-staging'
+  ECS_CLUSTER: 'downloader-staging'
+  ECS_TASK_DEFINITION: 'aws_ecs/task_definition.json'
+
+jobs:
+  deploy:
+    name: Deploy Downloader to Amazon ECS on AWS Fargate
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Assume the GitHub Action role using OIDC
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_GHA_ROLE_TO_ASSUME }}
+          role-duration-seconds: 900
+
+      - name: Assume the application deployer role
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_GHA_EXEC_ROLE_TO_ASSUME }}
+          role-duration-seconds: 900
+          role-skip-session-tagging: true
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . -f Dockerfile
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 7
