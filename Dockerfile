@@ -12,7 +12,7 @@ RUN apt-get update \
 FROM debian:bullseye-slim
 
 RUN apt-get update \
-    && apt-get install -y librdkafka-dev libmagic-dev \
+    && apt-get install -y librdkafka-dev libmagic-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r downloader \
     && useradd --no-log-init --shel /bin/bash -r -g downloader downloader
