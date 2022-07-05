@@ -62,15 +62,33 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, tag, and push image to Amazon ECR
-        id: build-image
+      - name: Construct the image URI
+        id: construct-image-uri
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . -f Dockerfile
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "::set-output name=imageURI::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Check if the image already exists on Amazon ECR
+        id: check-if-image-exists
+        env:
+          ECR_IMAGE_URI: ${{ steps.construct-image-uri.outputs.imageURI }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws ecr describe-images --repository-name $ECR_REPOSITORY \
+            --image-ids imageTag=${{ env.IMAGE_TAG }} 1>/dev/null &&
+          echo "::set-output name=output::image-exists" ||
+          echo "::set-output name=output::image-missing"
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_IMAGE_URI: ${{ steps.construct-image-uri.outputs.imageURI }}
+        if: ${{ steps.check-if-image-exists.outputs.output == 'image-missing' }}
+        run: |
+          docker build -t ${{ env.ECR_IMAGE_URI }} . -f Dockerfile
+          docker push ${{ env.ECR_IMAGE_URI }}
 
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: task-def
@@ -78,7 +96,7 @@ jobs:
         with:
           task-definition: ${{ env.ECS_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.build-image.outputs.image }}
+          image: ${{ steps.construct-image-uri.outputs.imageURI }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
