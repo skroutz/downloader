@@ -1,39 +1,39 @@
 {
-	"redis": {
-		"addr": "127.0.0.1:6379"
-	},
-	"api": {
-		"heartbeat_path":"/tmp/disable_api"
-	},
-	"processor": {
-	    "filestorage": {
-            "type": "filesystem",
-            "rootdir": "/tmp/",
-        },
-		"storage_dir":"/tmp/",
-		"request_headers": {
-			"Accept": "*/*",
-			"User-Agent": "Downloader v1"
-		},
-		"stats_interval": 5000
-	},
-	"notifier": {
-		"download_url": "http://localhost/foo",
-		"concurrency": 10,
-		"stats_interval": 5000,
-		"deletion_interval": 180
-	},
-	"backends": {
-		"http": {
-			"timeout": 30
-		},
-		"kafka": {
-			"bootstrap.servers": "localhost:9092",
-			"api.version.request": true,
-			"log.connection.close": false,
-			"go.delivery.reports": true,
-			"message.send.max.retries": 3,
-			"request.required.acks": -1
-		}
-	}
+  "redis": {
+    "addr": "127.0.0.1:6379"
+  },
+  "api": {
+    "heartbeat_path": "/tmp/disable_api"
+  },
+  "processor": {
+    "filestorage": {
+      "type": "filesystem",
+      "rootdir": "/tmp/"
+    },
+    "storage_dir": "/tmp/",
+    "request_headers": {
+      "Accept": "*/*",
+      "User-Agent": "Downloader v1"
+    },
+    "stats_interval": 5000
+  },
+  "notifier": {
+    "download_url": "http://localhost/foo",
+    "concurrency": 10,
+    "stats_interval": 5000,
+    "deletion_interval": 180
+  },
+  "backends": {
+    "http": {
+      "timeout": 30
+    },
+    "kafka": {
+      "bootstrap.servers": "localhost:9092",
+      "api.version.request": true,
+      "log.connection.close": false,
+      "go.delivery.reports": true,
+      "message.send.max.retries": 3,
+      "request.required.acks": -1
+    }
+  }
 }
