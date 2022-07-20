@@ -1,6 +1,7 @@
 package filestorage
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -49,6 +50,13 @@ func (fs FileSystem) StoreFile(srcpath string, destpath string) error {
 	}
 
 	return nil
+}
+
+// StoreFileWithTags simply calls StoreFiles since we can't handle tags in this
+// backend
+func (fs FileSystem) StoreFileWithMetadata(srcpath string, destpath string, metadata map[string]interface{}) error {
+	fmt.Fprintf(os.Stderr, "[WARN] StoreFileWithTags called from filesystem backend. Metadata are ignored\n")
+	return fs.StoreFile(srcpath, destpath)
 }
 
 // DeleteFile removes a file from the filesystem storage

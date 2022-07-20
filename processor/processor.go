@@ -32,6 +32,7 @@ package processor
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"expvar"
 	"fmt"
@@ -661,7 +662,19 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 	}
 	if j.S3Bucket != "" && j.S3Region != "" {
 		jobStorage := filestorage.NewAWSS3(j.S3Region, j.S3Bucket)
-		err := jobStorage.StoreFile(tmpPath, j.Path())
+		if j.Extra != "" {
+			metadata := make(map[string]interface{})
+			err := json.Unmarshal([]byte(j.Extra), &metadata)
+
+			if err != nil {
+				return derrors.E("Could not unmarhal Extra", err)
+			}
+
+			err = jobStorage.StoreFileWithMetadata(tmpPath, j.Path(), metadata)
+		} else {
+			err = jobStorage.StoreFile(tmpPath, j.Path())
+		}
+
 		if err != nil {
 			return derrors.E("storing file to job specified AWS S3 bucket", err)
 		}
