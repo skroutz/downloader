@@ -241,8 +241,7 @@ To run the tests and perform various package-related checks, just run:
 $ make check
 ```
 
-Redis
--------------------------------------------------------------------------------
+## Redis
 
 For convenience, we provide a docker-compose.yml which starts a redis instance,
 which you can use for the checks or manual testing.
@@ -262,6 +261,31 @@ $ docker-compose stop
 
 The above requires you to have `docker-compose` installed. If you have not,
 see [here](https://docs.docker.com/compose/install/).
+
+## Docker image
+
+Currently, we maintain a containers' "anti-pattern" for running downloader, that is having a single
+container image for running all downloader processes, i.e., API, Processor, and Notifier. To do so,
+we have a very simple wrapper entrypoint script, which spawns all three processes one by one and
+then just waits for them until exit.
+
+In order to build and run the container, given that you have a Redis instance running you only have
+to perform the following actions:
+
+```shell
+$ docker build -t downloader:devel . -f Dockerfile
+$ docker run --rm --name downloader --network host downloader:devel
+```
+
+However, if you want to only run a single service (let's say the API), or use a custom config file,
+we may run a command like the following:
+
+```shell
+$ docker run --rm \
+  -v /your-path/a-config-file.json:/custom-config.json \
+  --name downloader --network host --entrypoint /srv/downloader \
+  downloader:devel api -c /custom-config.json --port 8000 --host 0.0.0.0
+```
 
 Credits
 -------------------------------------------------
