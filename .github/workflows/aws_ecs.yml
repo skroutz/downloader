@@ -1,13 +1,17 @@
 #
-# The current GitHub Action workflow is used to:
+# The current GitHub Action is a Reusable worklow[0] used to:
 #
-# - containerize the downloader application
+# - build the downloader container image
 # - push the image to Amazon Elastic Container Registry (ECR)
 # - deploy it to Amazon Elastic Container Service (ECS)
 #
-# The workflow is based on the official Github guide[0] and uses OpenID Connect[1] in order to be
-# able to access resources in AWS[2].
+# The workflow is based on the official Github guide[1] for deploying resources to ECS and uses
+# OpenID Connect[2] in order to be able to access resources in AWS[2]. Authorization to AWS is a
+# two step process; we first need to assume the GitHub Action role of the CI account using OIDC
+# (AWS_GHA_ROLE_TO_ASSUME secret) and then assume the application deployment role
+# (AWS_GHA_EXEC_ROLE_TO_ASSUME secret) prior to execute any actions on AWS.
 #
+#  [0]: https://docs.github.com/en/actions/using-workflows/reusing-workflows
 #  [0]: https://docs.github.com/en/actions/deployment/deploying-to-your-cloud-provider/deploying-to-amazon-elastic-container-service
 #  [1]: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect
 #  [2]: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
@@ -15,23 +19,43 @@
 name: Deploy Downloader to Amazon ECS on AWS Fargate
 
 on:
-  push:
-    branches:
-      - 'staging'
-
-env:
-  AWS_REGION: eu-central-1
-  CONTAINER_NAME: 'downloader'
-  ECR_REPOSITORY: 'downloader'
-  ECS_SERVICE: 'downloader-staging'
-  ECS_CLUSTER: 'downloader-staging'
-  ECS_TASK_DEFINITION: 'aws_ecs/task_definition.json'
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      aws_region:
+        default: 'eu-central-1'
+        required: false
+        type: string
+      container_name:
+        default: 'downloader'
+        required: false
+        type: string
+      ecr_repository:
+        default: 'downloader'
+        required: false
+        type: string
+      ecs_service:
+        required: true
+        type: string
+      ecs_cluster:
+        required: true
+        type: string
+      ecs_task_definition:
+        required: true
+        type: string
+    secrets:
+      aws_gha_role_to_assume:
+        required: true
+      aws_gha_exec_role_to_assume:
+        required: true
 
 jobs:
   deploy:
-    name: Deploy Downloader to Amazon ECS on AWS Fargate
+    name: Deploy Downloader to Amazon ECS on AWS Fargate for ${{ inputs.environment }}
     runs-on: ubuntu-latest
-    environment: staging
+    environment: ${{ inputs.environment }}
     permissions:
       id-token: write
       contents: read
@@ -43,8 +67,8 @@ jobs:
       - name: Assume the GitHub Action role using OIDC
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_GHA_ROLE_TO_ASSUME }}
+          aws-region: ${{ inputs.aws_region }}
+          role-to-assume: ${{ secrets.aws_gha_role_to_assume }}
           role-duration-seconds: 900
 
       - name: Assume the application deployer role
@@ -53,8 +77,8 @@ jobs:
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_GHA_EXEC_ROLE_TO_ASSUME }}
+          aws-region: ${{ inputs.aws_region }}
+          role-to-assume: ${{ secrets.aws_gha_exec_role_to_assume }}
           role-duration-seconds: 900
           role-skip-session-tagging: true
 
@@ -68,24 +92,21 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          echo "::set-output name=imageURI::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "ECR_IMAGE_URI=$ECR_REGISTRY/${{ inputs.ecr_repository}}:$IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Check if the image already exists on Amazon ECR
         id: check-if-image-exists
         env:
-          ECR_IMAGE_URI: ${{ steps.construct-image-uri.outputs.imageURI }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          aws ecr describe-images --repository-name $ECR_REPOSITORY \
+          aws ecr describe-images --repository-name ${{ inputs.ecr_repository }} \
             --image-ids imageTag=${{ env.IMAGE_TAG }} 1>/dev/null &&
-          echo "::set-output name=output::image-exists" ||
-          echo "::set-output name=output::image-missing"
+          echo "IMAGE_EXISTS=image-exists" >> $GITHUB_ENV ||
+          echo "IMAGE_EXISTS=image-missing" >> $GITHUB_ENV
 
       - name: Build, tag, and push image to Amazon ECR
         id: build-image
-        env:
-          ECR_IMAGE_URI: ${{ steps.construct-image-uri.outputs.imageURI }}
-        if: ${{ steps.check-if-image-exists.outputs.output == 'image-missing' }}
+        if: ${{ env.IMAGE_EXISTS }} == 'image-missing'
         run: |
           docker build -t ${{ env.ECR_IMAGE_URI }} . -f Dockerfile
           docker push ${{ env.ECR_IMAGE_URI }}
@@ -94,15 +115,15 @@ jobs:
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: ${{ env.ECS_TASK_DEFINITION }}
-          container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.construct-image-uri.outputs.imageURI }}
+          task-definition: ${{ inputs.ecs_task_definition }}
+          container-name: ${{ inputs.container_name }}
+          image: ${{ env.ECR_IMAGE_URI }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ inputs.ecs_service }}
+          cluster: ${{ inputs.ecs_cluster }}
           wait-for-service-stability: true
           wait-for-minutes: 7
