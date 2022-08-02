@@ -8,8 +8,7 @@ Visit the [wiki](../../wiki/) for documentation.
 
 [![CI](https://github.com/skroutz/downloader/actions/workflows/ci.yml/badge.svg)](https://github.com/skroutz/downloader/actions/workflows/ci.yml)
 
-Getting Started
--------------------------------------------------------------------------------
+# Getting Started
 
 Make sure that you have a working [Go
 environment](https://golang.org/doc/install) and that you have configured your
@@ -37,8 +36,7 @@ For more information about the supported make targets, please read the
 
 Enjoy! :)
 
-API
--------------------------------------------------------------------------------
+# API
 
 ## Endpoints
 #### POST /download
@@ -212,8 +210,7 @@ of a job's callback has been received and has no errors.
 Setting a callback becomes optional if the caller has provided an AWS S3 bucket to store the downloaded file. This is because
 it is possible to use AWS S3 object operations as event triggers directly.
 
-Web UI
-------------------------------------------------------------------------------
+# Web UI
 
 An informational Web UI is served on the default route of the API.
 Displayed Info:
@@ -221,8 +218,7 @@ Displayed Info:
 * Current active aggregations.
 * General statistics reported by the downloader.
 
-Development
--------------------------------------------------------------------------------
+# Development
 
 > :warning: You should have a *running* Redis instance in order to be able to
 > run the downloader's tests. Make sure to update the corresponding setting in
@@ -287,6 +283,48 @@ $ docker run --rm \
   downloader:devel api -c /custom-config.json --port 8000 --host 0.0.0.0
 ```
 
-Credits
--------------------------------------------------
+# Deploying to AWS
+
+On AWS, we maintain separate accounts per environment, i.e., *staging*, *prod*, or *test* in the
+future, where we have deployed the same infrastructure but with the resources' count adopted based
+on the account's usage, apparently. The accounts' infrastructure setup comes from a separate
+repository that is the [aws-downloader](https://github.com/skroutz/aws-downloader), and each
+environment is denoted by the respective branch, i.e, *staging*, *prod*, etc.
+
+In order to deploy the downloader service on AWS we follow a similar appoarch to the Infrastructure
+deployments. So consider that you are working on a new feature for downloader under a branch named
+*feature-x* and the testing of the feature is completed (let's say locally via Docker), the next
+step would be to test the feature on staging account. This is as easy as pushing your feature on
+staging remote branch and the respective GitHub Action will be triggered to deploy the application
+on AWS. The last step, would be to open a PR against the master branch; as soon as the PR get's
+approved and merged to master, the production GHA will be auto-triggered to deploy the application
+to the production AWS account.
+
+> TODO: We still need to consider the [deployment
+> strategy](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-types.html) we
+> intend to follow.
+
+## AWS GitHub Action Workflow
+
+The current GitHub Action (`aws_ecs.yml`) is a [Reusable
+worklow](https://docs.github.com/en/actions/using-workflows/reusing-workflows) which will be used
+to deploy downloader to the respective environment with the specified arguments and options. The
+workflow is based on the official [GitHub
+guide](https://docs.github.com/en/actions/deployment/deploying-to-your-cloud-provider/deploying-to-amazon-elastic-container-service)
+for deploying resources to ECS and it is used to:
+
+- Build the downloader container image
+- Push the image to Amazon Elastic Container Registry (ECR)
+- Deploy it to Amazon Elastic Container Service (ECS)
+
+In order to access resources on AWS, we follow GitHub's best practices and make use of [OpenID
+Connect](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect).
+Authorization to AWS is a two step process; we first need to assume the GitHub Action role of the
+central CI account using OIDC (`AWS_GHA_ROLE_TO_ASSUME` secret) and then assume the account's
+application deployment role (`AWS_GHA_EXEC_ROLE_TO_ASSUME` secret) prior to execute any actions on
+AWS. The secret on GitHub are stored using *GitHub environments* with branch protection rules
+applied.
+
+# Credits
+
 downloader is released under the GNU General Public License version 3. See [COPYING](COPYING).
