@@ -1,0 +1,22 @@
+#
+# Deploy downloader to Production account using the local aws_ecs Reusable workflow.
+#
+name: Production deploy of Downloader to Amazon ECS on AWS Fargate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+
+jobs:
+  deploy-ecs:
+    uses: ./.github/workflows/aws_ecs.yml
+    with:
+      environment: 'production'
+      ecs_service: 'downloader-prod'
+      ecs_cluster: 'downloader-prod'
+      ecs_task_definition: 'aws_ecs/task_definition-production.json'
+    secrets:
+      aws_gha_role_to_assume: ${{ secrets.AWS_GHA_ROLE_TO_ASSUME }}
+      aws_gha_exec_role_to_assume: ${{ secrets.AWS_GHA_EXEC_ROLE_TO_ASSUME }}

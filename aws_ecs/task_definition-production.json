@@ -1,0 +1,47 @@
+{
+  "taskRoleArn": "downloader-prod-ecs-taskrole",
+  "executionRoleArn": "downloader-prod-ecs-taskexecutionrole",
+  "family": "downloader-prod",
+  "containerDefinitions": [
+    {
+      "image": "downloader",
+      "name": "downloader",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "secrets" : [
+        {
+          "name": "AWS_CONFIG_FILE_BASE64",
+          "valueFrom": "arn:aws:ssm:eu-central-1:419298435235:parameter/prod/downloader/config_file_base64"
+        }
+      ],
+      "entryPoint": [
+        "bash",
+        "-c",
+        "set -ueo pipefail; echo $AWS_CONFIG_FILE_BASE64 | base64 -id > /srv/config.json; /srv/entrypoint.sh"
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/fargate/service/downloader-prod",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "networkMode": "awsvpc",
+  "runtimePlatform": {
+    "operatingSystemFamily": "LINUX"
+  },
+  "requiresCompatibilities": [
+    "FARGATE"
+  ]
+}
