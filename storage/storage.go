@@ -583,6 +583,8 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			j.S3Bucket = v
 		case "S3Region":
 			j.S3Region = v
+		case "SubPath":
+			j.SubPath = v
 		case "DownloadURL":
 			j.DownloadURL = v
 		default:

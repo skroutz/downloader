@@ -98,6 +98,9 @@ type Job struct {
 
 	S3Bucket string `json:"s3_bucket"`
 	S3Region string `json:"s3_region"`
+
+	// [Optional] Store processed jobs under this subfolder(s) of top level directory.
+	SubPath string `json:"subpath"`
 }
 
 // MarshalBinary is used by redis driver to marshall custom type State
@@ -107,7 +110,7 @@ func (s State) MarshalBinary() (data []byte, err error) {
 
 // Path returns the relative job path
 func (j *Job) Path() string {
-	return path.Join(string(j.ID[0:3]), j.ID)
+	return path.Join(j.SubPath, string(j.ID[0:3]), j.ID)
 }
 
 // UnmarshalJSON is used to populate a job from the values in
@@ -153,6 +156,11 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 		return errors.New("s3_region provided without an s3_bucket")
 	} else if s3Region == "" && s3Bucket != "" {
 		return errors.New("s3_bucket provided without an s3_region")
+	}
+
+	subPath, ok := tmp["subpath"].(string)
+	if ok {
+		j.SubPath = subPath
 	}
 
 	cbURL, ok := tmp["callback_url"].(string)
