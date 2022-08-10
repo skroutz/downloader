@@ -43,5 +43,31 @@
   },
   "requiresCompatibilities": [
     "FARGATE"
+  ],
+    "tags": [
+      {
+        "key": "map-migrated",
+        "value": "d-server-020dlwjzogxjm8"
+      },
+      {
+        "key": "Name",
+        "value": "Downloader"
+      },
+      {
+        "key": "Environment",
+        "value": "Staging"
+      },
+      {
+        "key": "DeployedFrom",
+        "value": "https://github.com/skroutz-internal/downloader"
+      },
+      {
+        "key": "ManagedBy",
+        "value": "GitHub Actions"
+      },
+      {
+        "key": "OwnedBy",
+        "value": "Application SRE :: application-sre@teams.skroutz.gr"
+      }
   ]
 }
