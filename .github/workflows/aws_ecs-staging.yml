@@ -1,5 +1,7 @@
 #
-# Deploy downloader to Staging account using the local aws_ecs Reusable workflow.
+# Deploy downloader to Staging account via the skroutz-internal/aws-deploy-ecs-action action.
+#
+#   https://github.com/skroutz-internal/aws-deploy-ecs-action
 #
 name: Staging deploy of Downloader to Amazon ECS on AWS Fargate
 
@@ -11,12 +13,25 @@ on:
 
 jobs:
   deploy-ecs:
-    uses: ./.github/workflows/aws_ecs.yml
-    with:
-      environment: 'staging'
-      ecs_service: 'downloader-staging'
-      ecs_cluster: 'downloader-staging'
-      ecs_task_definition: 'aws_ecs/task_definition-staging.json'
-    secrets:
-      aws_gha_role_to_assume: ${{ secrets.AWS_GHA_ROLE_TO_ASSUME }}
-      aws_gha_exec_role_to_assume: ${{ secrets.AWS_GHA_EXEC_ROLE_TO_ASSUME }}
+    name: 'Staging deployment of Downloader to Amazon ECS on AWS Fargate'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build image, upload to ECR, and deploy to Amazon ECS
+        uses: skroutz-internal/aws-deploy-ecs-action@v1
+        with:
+          ecr_repository: 'downloader'
+          container_name: 'downloader'
+          ecs_service: 'downloader-staging'
+          ecs_cluster: 'downloader-staging'
+          ecs_task_definition: 'aws_ecs/task_definition-staging.json'
+          wait_for_minutes: 7
+          aws_gha_role_to_assume: ${{ secrets.AWS_GHA_ROLE_TO_ASSUME }}
+          aws_gha_exec_role_to_assume: ${{ secrets.AWS_GHA_EXEC_ROLE_TO_ASSUME }}
