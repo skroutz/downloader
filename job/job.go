@@ -160,6 +160,9 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 
 	subPath, ok := tmp["subpath"].(string)
 	if ok {
+		if !isValidPath(subPath) {
+			return errors.New("Invalid path specified: " + subPath)
+		}
 		j.SubPath = subPath
 	}
 
@@ -337,4 +340,21 @@ func (j Job) String() string {
 		j.ExtractImageSize, j.ImageSize,
 		j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout, j.RequestHeaders,
 		j.DownloadURL)
+}
+
+// Checks if `passedPath` is a safe path and it does not tries to exploit the
+// directory tree. The only irregularity it accepts is `foo///bar` paths,
+// everything else is rejected.
+// The given path will be attached to the rootpath afterwards, so it will never
+// get evaluated as relative. To always be checked as absolute in cleaning,
+// we attach a '/' beforehand.
+// Examples:
+//
+// Valid paths:   "/bar/"", "/bar/zoo", "/bar/////zoo", "bar/////zoo", "bar"
+// Invalid paths: "/bar/../../zoo/", "../bar//zoo", "/../../../../", "bar/../zoo"
+func isValidPath(passedPath string) bool {
+	rawPath := strings.ReplaceAll(passedPath, "/", "")
+	clnPath := strings.ReplaceAll(path.Clean("/"+passedPath), "/", "")
+
+	return rawPath == clnPath
 }
