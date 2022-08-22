@@ -335,11 +335,14 @@ func (j *Job) HasCallback() bool {
 func (j Job) String() string {
 	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, "+
 		"ExtractImageSize:%t, ImageSize: %s, "+
-		"callback_url:%s, callback_type:%s, callback_dst:%s, Timeout:%d, RequestHeaders:%v, DownloadURL:%s}",
+		"callback_url:%s, callback_type:%s, callback_dst:%s, "+
+		"Timeout:%d, RequestHeaders:%v, DownloadURL:%s, "+
+		"S3Bucket:%s, S3Region:%s, SubPath:%s}",
 		j.ID, j.AggrID, j.URL,
 		j.ExtractImageSize, j.ImageSize,
-		j.CallbackURL, j.CallbackType, j.CallbackDst, j.DownloadTimeout, j.RequestHeaders,
-		j.DownloadURL)
+		j.CallbackURL, j.CallbackType, j.CallbackDst,
+		j.DownloadTimeout, j.RequestHeaders,
+		j.DownloadURL, j.S3Bucket, j.S3Region, j.SubPath)
 }
 
 // Checks if `passedPath` is a safe path and it does not tries to exploit the
