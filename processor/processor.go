@@ -661,10 +661,12 @@ func (wp *workerPool) download(ctx context.Context, j *job.Job, validator *mimet
 		j.ImageSize = fmt.Sprintf("%dx%d", c.Width, c.Height)
 	}
 	if j.S3Bucket != "" && j.S3Region != "" {
+		var err error
+
 		jobStorage := filestorage.NewAWSS3(j.S3Region, j.S3Bucket)
 		if j.Extra != "" {
 			metadata := make(map[string]interface{})
-			err := json.Unmarshal([]byte(j.Extra), &metadata)
+			err = json.Unmarshal([]byte(j.Extra), &metadata)
 
 			if err != nil {
 				return derrors.E("Could not unmarhal Extra", err)
