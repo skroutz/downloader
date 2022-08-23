@@ -102,7 +102,7 @@ func TestJobToString(t *testing.T) {
 	testJob := Job{}
 	res := testJob.String()
 	expected := "Job{ID:, Aggr:, URL:, ExtractImageSize:false, ImageSize: , " +
-		"callback_url:, callback_type:, callback_dst:, Timeout:0, RequestHeaders:map[], "+
+		"callback_url:, callback_type:, callback_dst:, Timeout:0, RequestHeaders:map[], " +
 		"DownloadURL:, S3Bucket:, S3Region:, SubPath:}"
 
 	if res != expected {
