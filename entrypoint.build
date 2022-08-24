@@ -1,4 +1,5 @@
 #!/bin/sh
 
-GOARCH=amd64 GOOS=linux go generate -tags embedstatic ./api
-GOARCH=amd64 GOOS=linux go build -tags embedstatic -ldflags "-X main.Version=`git rev-parse HEAD`"  -o /build/downloader
+cd /downloader || exit 1
+
+GOARCH=amd64 GOOS=linux go build -tags embedstatic -ldflags "-X main.Version=$(git rev-parse HEAD)" -trimpath -o /build/downloader
