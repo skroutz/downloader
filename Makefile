@@ -16,7 +16,7 @@
 
 #
 
-.PHONY: install fmt build check install clean distclean lint vet
+.PHONY: install fmt build check install clean distclean lint vet docker-image-build docker-build docker-clean
 
 all: fmt build
 
@@ -28,6 +28,17 @@ fmt:
 
 build:
 	go build
+
+docker-clean:
+	rm -rf docker-build
+
+docker-image-build:
+	docker image build -f Dockerfile.build -t downloader-build:latest .
+
+docker-build: docker-clean docker-image-build
+	docker container run --rm -v $(CURDIR):/downloader -v /tmp:/build downloader-build:latest
+	mkdir -p docker-build
+	cp /tmp/downloader docker-build/
 
 check: build
 	go test -race -p 1 ./...
