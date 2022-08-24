@@ -1,11 +1,6 @@
-FROM golang:1.18 as builder
-
-WORKDIR /downloader
-
-COPY . /downloader
+FROM golang:1.18
 
 RUN apt-get update \
-    && apt-get install -y librdkafka-dev libmagic-dev\
-    && make
+    && apt-get install -y librdkafka-dev libmagic-dev
 
 ENTRYPOINT [ "/downloader/entrypoint.build" ]
