@@ -1,0 +1,73 @@
+{
+  "taskRoleArn": "downloader-dr-ecs-taskrole",
+  "executionRoleArn": "downloader-dr-ecs-taskexecutionrole",
+  "family": "downloader-dr",
+  "containerDefinitions": [
+    {
+      "image": "downloader",
+      "name": "downloader",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "secrets" : [
+        {
+          "name": "AWS_CONFIG_FILE_BASE64",
+          "valueFrom": "arn:aws:ssm:eu-west-1:419298435235:parameter/dr/downloader/config_file_base64"
+        }
+      ],
+      "entryPoint": [
+        "bash",
+        "-c",
+        "set -ueo pipefail; echo $AWS_CONFIG_FILE_BASE64 | base64 -id > /srv/config.json; /srv/entrypoint.sh"
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/fargate/service/downloader-dr",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "networkMode": "awsvpc",
+  "runtimePlatform": {
+    "operatingSystemFamily": "LINUX"
+  },
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+    "tags": [
+      {
+        "key": "map-migrated",
+        "value": "d-server-020dlwjzogxjm8"
+      },
+      {
+        "key": "Name",
+        "value": "Downloader"
+      },
+      {
+        "key": "Environment",
+        "value": "DR"
+      },
+      {
+        "key": "DeployedFrom",
+        "value": "https://github.com/skroutz-internal/downloader"
+      },
+      {
+        "key": "ManagedBy",
+        "value": "GitHub Actions"
+      },
+      {
+        "key": "OwnedBy",
+        "value": "Application SRE :: application-sre@teams.skroutz.gr"
+      }
+  ]
+}

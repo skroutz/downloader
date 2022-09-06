@@ -1,0 +1,38 @@
+#
+# Deploy downloader to Production DR account via the skroutz-internal/aws-deploy-ecs-action action.
+#
+#   https://github.com/skroutz-internal/aws-deploy-ecs-action
+#
+name: DR deploy of Downloader to Amazon ECS on AWS Fargate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'dr'
+
+jobs:
+  deploy-ecs:
+    name: 'DR deployment of Downloader to Amazon ECS on AWS Fargate'
+    runs-on: ubuntu-latest
+    environment: dr
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build image, upload to ECR, and deploy to Amazon ECS
+        uses: skroutz-internal/aws-deploy-ecs-action@v1
+        with:
+          aws_region: 'eu-west-1'
+          ecr_repository: 'downloader'
+          container_name: 'downloader'
+          ecs_service: 'downloader-dr'
+          ecs_cluster: 'downloader-dr'
+          ecs_task_definition: 'aws_ecs/task_definition-dr.json'
+          wait_for_minutes: 10
+          aws_gha_role_to_assume: ${{ secrets.AWS_GHA_ROLE_TO_ASSUME }}
+          aws_gha_exec_role_to_assume: ${{ secrets.AWS_GHA_EXEC_ROLE_TO_ASSUME }}
