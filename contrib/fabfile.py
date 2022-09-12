@@ -28,11 +28,10 @@ def version():
 
 @runs_once
 def build():
-    local('GOARCH=amd64 GOOS=linux go generate -tags embedstatic ./api')
-    local('GOARCH=amd64 GOOS=linux go build -tags embedstatic -ldflags "-X main.Version=`git rev-parse HEAD`"  -o downloader')
+    local('make docker-build')
 
 def copy():
-    put('downloader', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
+    put('docker-build/downloader', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
     put('utils/dlstats-graphite', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
     put('utils/purge-assets', '/usr/local/lib/downloader/bin', use_sudo=True, mode=0755)
 
