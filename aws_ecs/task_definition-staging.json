@@ -23,7 +23,7 @@
       "entryPoint": [
         "bash",
         "-c",
-        "set -ueo pipefail; echo $AWS_CONFIG_FILE_BASE64 | base64 -id > /srv/config.json; /srv/entrypoint.sh"
+        "set -ueo pipefail; echo $AWS_CONFIG_FILE_BASE64 | base64 -id > /srv/config.json; /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
