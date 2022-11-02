@@ -541,6 +541,10 @@ func jobFromMap(m map[string]string) (job.Job, error) {
 			j.CallbackType = v
 		case "CallbackDst":
 			j.CallbackDst = v
+		case "CallbackErrType":
+			j.CallbackErrType = v
+		case "CallbackErrDst":
+			j.CallbackErrDst = v
 		case "CallbackCount":
 			j.CallbackCount, err = strconv.Atoi(v)
 			if err != nil {

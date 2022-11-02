@@ -61,7 +61,9 @@ type Job struct {
 	CallbackDst   string `json:"callback_dst"`
 	// TODO: Remove CallbackURL, in favor of CallbackType and CallbackDst, after
 	// all users of Downloader have upgraded their request scheme.
-	CallbackURL string `json:"callback_url"`
+	CallbackURL     string `json:"callback_url"`
+	CallbackErrType string `json:"callback_error_type"`
+	CallbackErrDst  string `json:"callback_error_dst"`
 
 	// This is the base URL that the downloaded file can be found.
 	DownloadURL string `json:"-"`
@@ -202,6 +204,22 @@ func (j *Job) UnmarshalJSON(b []byte) error {
 
 		j.CallbackType = cbType
 		j.CallbackDst = cbDst
+
+		cbErrType, ok := tmp["callback_error_type"].(string)
+		if ok {
+			j.CallbackErrType = cbErrType
+		}
+
+		cbErrDst, ok := tmp["callback_error_dst"].(string)
+		if ok {
+			if strings.HasPrefix(cbErrDst, "http") {
+				_, err = url.ParseRequestURI(cbErrDst)
+				if err != nil {
+					return errors.New("Could not parse URL: " + err.Error())
+				}
+			}
+			j.CallbackErrDst = cbErrDst
+		}
 	}
 
 	extra, ok := tmp["extra"].(string)
@@ -329,18 +347,18 @@ func (j *Job) CallbackInfo() (Callback, error) {
 // its own AWS S3 bucket for storage and hasn't specified a callback_type
 // and a callback_dst or a callback_url
 func (j *Job) HasCallback() bool {
-	return j.CallbackURL != "" || j.CallbackDst != ""
+	return j.CallbackURL != "" || j.CallbackDst != "" || j.CallbackErrDst != ""
 }
 
 func (j Job) String() string {
 	return fmt.Sprintf("Job{ID:%s, Aggr:%s, URL:%s, "+
 		"ExtractImageSize:%t, ImageSize: %s, "+
-		"callback_url:%s, callback_type:%s, callback_dst:%s, "+
+		"callback_url:%s, callback_type:%s, callback_dst:%s, callback_error_type:%s, callback_error_dst:%s, "+
 		"Timeout:%d, RequestHeaders:%v, DownloadURL:%s, "+
 		"S3Bucket:%s, S3Region:%s, SubPath:%s}",
 		j.ID, j.AggrID, j.URL,
 		j.ExtractImageSize, j.ImageSize,
-		j.CallbackURL, j.CallbackType, j.CallbackDst,
+		j.CallbackURL, j.CallbackType, j.CallbackDst, j.CallbackErrType, j.CallbackErrDst,
 		j.DownloadTimeout, j.RequestHeaders,
 		j.DownloadURL, j.S3Bucket, j.S3Region, j.SubPath)
 }

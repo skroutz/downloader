@@ -234,3 +234,132 @@ func TestRogueCollection(t *testing.T) {
 		}
 	}
 }
+
+func TestGetCallbackTypeAndDst(t *testing.T) {
+	n, err := New(store, 10, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	errorUrl := "http://localhost/failures"
+	testcases := []struct {
+		Job          job.Job
+		expectedType string
+		expectedDst  string
+	}{
+		{
+			job.Job{
+				ID:            "Success with Http with URL",
+				CallbackType:  BackendHTTPID,
+				CallbackURL:   cbServer.URL,
+				DownloadState: job.StateSuccess,
+			},
+			BackendHTTPID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:            "Success with only CallbackURL",
+				CallbackURL:   cbServer.URL,
+				DownloadState: job.StateSuccess,
+			},
+			BackendHTTPID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:            "Success with Http with Dst",
+				CallbackType:  BackendHTTPID,
+				CallbackDst:   cbServer.URL,
+				DownloadState: job.StateSuccess,
+			},
+			BackendHTTPID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:            "Success with SQS",
+				CallbackType:  BackendSQSID,
+				CallbackDst:   cbServer.URL,
+				DownloadState: job.StateSuccess,
+			},
+			BackendSQSID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:            "Pending with SQS",
+				CallbackType:  BackendSQSID,
+				CallbackDst:   cbServer.URL,
+				DownloadState: job.StatePending,
+			},
+			BackendSQSID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:            "InProgress with SQS",
+				CallbackType:  BackendSQSID,
+				CallbackDst:   cbServer.URL,
+				DownloadState: job.StateInProgress,
+			},
+			BackendSQSID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:            "Success with Kafka",
+				CallbackType:  BackendKafkaID,
+				CallbackDst:   cbServer.URL,
+				DownloadState: job.StateSuccess,
+			},
+			BackendKafkaID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:              "Success with Http & SQS for errors",
+				CallbackType:    BackendHTTPID,
+				CallbackDst:     cbServer.URL,
+				CallbackErrType: BackendSQSID,
+				CallbackErrDst:  errorUrl,
+				DownloadState:   job.StateSuccess,
+			},
+			BackendHTTPID, cbServer.URL,
+		},
+		{
+			job.Job{
+				ID:              "Failed with Http & SQS for errors",
+				CallbackType:    BackendHTTPID,
+				CallbackDst:     cbServer.URL,
+				CallbackErrType: BackendSQSID,
+				CallbackErrDst:  errorUrl,
+				DownloadState:   job.StateFailed,
+			},
+			BackendSQSID, errorUrl,
+		},
+		{
+			job.Job{
+				ID:             "Failed with Http for errors",
+				CallbackType:   BackendHTTPID,
+				CallbackDst:    cbServer.URL,
+				CallbackErrDst: errorUrl,
+				DownloadState:  job.StateFailed,
+			},
+			BackendHTTPID, errorUrl,
+		},
+		{
+			job.Job{
+				ID:            "Failed with Http without error dst",
+				CallbackType:  BackendHTTPID,
+				CallbackDst:   cbServer.URL,
+				DownloadState: job.StateFailed,
+			},
+			BackendHTTPID, cbServer.URL,
+		},
+	}
+
+	for _, tc := range testcases {
+		cbType, cbDst := n.getCallbackTypeAndDst(&tc.Job)
+		if cbType != tc.expectedType {
+			t.Errorf("%s:: Expected callback type %s, found %s", tc.Job.ID, tc.expectedType, cbType)
+		}
+
+		if cbDst != tc.expectedDst {
+			t.Errorf("%s:: Expected callback destination %s, found %s", tc.Job.ID, tc.expectedDst, cbDst)
+		}
+	}
+}

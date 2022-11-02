@@ -52,6 +52,8 @@ Parameters:
  * `callback_type`: ( optional if `s3_bucket` is set) string, The callback backend type. Either `http` or `kafka` or `sqs`. Deprecates `callback_url`.
  * `callback_url`: ( optional if `s3_bucket` is set) string, The endpoint on which the job callback request will be performed.
  * `callback_dst`: ( optional if `s3_bucket` is set) string, The endpoint on which the job callback request will be performed. Deprecates `callback_url`.
+ * `callback_error_type`: ( optional ) string, The callback backend type for faulty downloads. Either `http` or `kafka` or `sqs`.
+ * `callback_error_dst`: ( optional ) string, The endpoint on which if the job fails, where the callback request will be performed.
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
  * `mime_type`: ( optional ) string, series of mime types that the download is going to be verified against.
  * `max_retries`: ( optional ) int, Maximum download retries when retryiable errors are encountered.
@@ -141,6 +143,28 @@ Suppose you have already configured and created an sqs queue `downloader_notific
 $ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"sqs" ,"callback_dst":"aws.com/sqs/downloader_notifications", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://downloader.example.com/download
 # => {"id":"Hl2VErjyL5UK9A"}
 ```
+
+#### Example request with an `S3 bucket` and an `sqs` error notification channel
+```
+curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_error_type":"sqs", "callback_error_dst":"https://sqs.eu-central-1.amazonaws.com/12345/failed_downloads", "s3_bucket":"mo_downloads", "s3_region":"eu-central-1", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://0.0.0.0:3000/download
+```
+Note: In case there is already a callback_type defined and the same type is requested for the error notifications, the callback_error_type can be skipped.
+
+example:
+```
+{
+    "callback_type":"sqs", "callback_dst":"aws.com/successful_downloads",
+    "callback_error_type":"sqs", "callback_error_dst":"aws.com/failed_downloads"
+}
+```
+can be
+```
+{
+    "callback_type":"sqs", "callback_dst":"aws.com/successful_downloads",
+    "callback_error_dst":"aws.com/failed_downloads"
+}
+```
+and the `callback_error_type` will be assumed to be `sqs`.
 
 Example Callback payloads:
 

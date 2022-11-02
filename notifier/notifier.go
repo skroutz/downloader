@@ -384,10 +384,21 @@ func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
 // getCallbackTypeAndDst returns callback type and destination from either
 // the job's callback_url or callback_type and callback_dst.
 // When callback_url is present then as callback type the "http" is returned.
+//
+// Optionally, a Callback Error Destination can be defined for failures.
+// Supporting also the type of the Callback to be different from the successful
+// Callback path.
 func (n *Notifier) getCallbackTypeAndDst(j *job.Job) (string, string) {
 	if j.CallbackURL != "" {
+		// Depricated path. CallbackDst should be used instead.
 		return "http", j.CallbackURL
 	}
 
+	if j.DownloadState == job.StateFailed && j.CallbackErrDst != "" {
+		if j.CallbackErrType != "" {
+			return j.CallbackErrType, j.CallbackErrDst
+		}
+		return j.CallbackType, j.CallbackErrDst
+	}
 	return j.CallbackType, j.CallbackDst
 }
