@@ -49,7 +49,7 @@ Parameters:
  * `aggr_limit`: int, Max concurrency limit for the specified group ( aggr_id ).
  * `aggr_proxy`: ( optional ) string, HTTP proxy configuration. It is set up on aggregation level and it cannot be updated for an existing aggregation.
  * `url`: string, The URL pointing to the resource that will get downloaded.
- * `callback_type`: ( optional if `s3_bucket` is set) string, The callback backend type. Either `http` or `kafka`. Deprecates `callback_url`.
+ * `callback_type`: ( optional if `s3_bucket` is set) string, The callback backend type. Either `http` or `kafka` or `sqs`. Deprecates `callback_url`.
  * `callback_url`: ( optional if `s3_bucket` is set) string, The endpoint on which the job callback request will be performed.
  * `callback_dst`: ( optional if `s3_bucket` is set) string, The endpoint on which the job callback request will be performed. Deprecates `callback_url`.
  * `extra`: ( optional ) string, Client provided metadata that get passed back in the callback.
@@ -87,6 +87,7 @@ in order to correctly enable the backends that are defined in the config's `back
 If no backends are given the Notifier will throw an error and exit with a non-zero code.
 If you want to enable the http backend add the `http` key along with its `timeout` value.
 If you want to enable the kafka backend add the `kafka` key along with your desired configuration.
+If you want to enable the sqs backend add the `sqs` key along with its `region` value.
 
 #### Storage backend
 Downloader is able to store files on an AWS S3 bucket instead of a filesystem. This is possible by providing a
@@ -131,6 +132,13 @@ $ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"https://httpbi
 Suppose you have already configured a kafka cluster and created a topic `dwl_images`.
 ```shell
 $ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"kafka" ,"callback_dst":"dwl_images", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://downloader.example.com/download
+# => {"id":"Hl2VErjyL5UK9A"}
+```
+
+#### Example using `sqs` as backend
+Suppose you have already configured and created an sqs queue `downloader_notifications` in the region that is in the configuration file.
+```shell
+$ curl -XPOST -d '{"aggr_id":"aggrFooBar", "aggr_limit":8, "url":"http://httpbin.org/image/png", "callback_type":"sqs" ,"callback_dst":"aws.com/sqs/downloader_notifications", "extra":"foobar", "mime_type": "!image/vnd.adobe.photoshop,image/*", "request_headers": {"Accept":"image/png,image/jpeg,image/*,*/*","User-Agent":"Downloader-Agent"}}' http://downloader.example.com/download
 # => {"id":"Hl2VErjyL5UK9A"}
 ```
 

@@ -15,6 +15,7 @@ import (
 	"github.com/skroutz/downloader/backend"
 	httpbackend "github.com/skroutz/downloader/backend/http_backend"
 	kafkabackend "github.com/skroutz/downloader/backend/kafka_backend"
+	sqsbackend "github.com/skroutz/downloader/backend/sqs_backend"
 	"github.com/skroutz/downloader/job"
 	"github.com/skroutz/downloader/stats"
 	"github.com/skroutz/downloader/storage"
@@ -32,6 +33,9 @@ const (
 
 	// BackendKafkaID is a known backend implementation
 	BackendKafkaID = "kafka"
+
+	// BackendSqsID is a known backend implementation
+	BackendSQSID = "sqs"
 )
 
 var (
@@ -113,6 +117,8 @@ func (n *Notifier) Start(closeChan chan struct{}, backendCfg map[string]map[stri
 			n.backends[id] = &httpbackend.Backend{}
 		} else if id == BackendKafkaID {
 			n.backends[id] = &kafkabackend.Backend{}
+		} else if id == BackendSQSID {
+			n.backends[id] = &sqsbackend.Backend{}
 		}
 
 		b := n.backends[id]
