@@ -64,8 +64,7 @@ func (b *Backend) Notify(url string, cbInfo job.Callback) error {
 	})
 
 	if err != nil {
-		fmt.Println("Got an error sending the message:")
-		fmt.Println(err)
+		err = fmt.Errorf("Got an error sending the message: %s", err.Error())
 		cbInfo.Delivered = false
 		cbInfo.DeliveryError = err.Error()
 		return err
