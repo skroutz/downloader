@@ -390,7 +390,7 @@ func (n *Notifier) markCbFailed(j *job.Job, meta ...string) error {
 // Callback path.
 func (n *Notifier) getCallbackTypeAndDst(j *job.Job) (string, string) {
 	if j.CallbackURL != "" {
-		// Depricated path. CallbackDst should be used instead.
+		// Deprecated path. CallbackDst should be used instead.
 		return "http", j.CallbackURL
 	}
 
